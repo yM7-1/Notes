@@ -1,0 +1,48 @@
+"workshopitem"
+{
+	"appid"		"2868840"
+	"publishedfileid"		"3808343573"
+	"contentfolder"		"D:\\0_git\\Notes\\packaging\\workshop\\content"
+	"previewfile"		"D:\\0_git\\Notes\\packaging\\workshop\\preview.png"
+	"title"		"战斗笔记 / Notes"
+	"description"		"[h1]战斗笔记 / Notes[/h1]
+战斗中自动记录的「世界线笔记本」：不用手动记，打完每一步都能回看、推演、复盘。
+
+[h2]自动记录（零操作）[/h2]
+进入战斗后，当前世界线画板会自动把每一步编成链条，无需手动录入：
+[list]
+[*]出牌、用药、抽牌、弃牌、消耗、回合结束，按时间顺序成链
+[*]每步可查看：操作前手牌、当时状态（生命/格挡/能量/增益/药水/敌方血量）
+[*]操作对象与结果：「打击」对 火炬头 造成 6 点伤害并击杀；「火焰药水」对 扭动虫2 造成 20 点伤害并击杀
+[*]同名敌人自动编号（扭动虫1、扭动虫2、扭动虫3…）
+[*]消耗/弃牌明细并入触发操作（打出「净化」→「净化」、「进阶之灾」、「后空翻」被消耗）
+[*]回合之间的小旁注：敌人塞牌【异蛙寄生虫】将【感染*3】加入到【弃牌堆】、回合间战损等
+[/list]
+
+[h2]世界线推演[/h2]
+[list]
+[*]「复制→新世界线」一键把当前战况复制成可交互画板
+[*]从手牌/卡组/百科拖卡成图例，连成分支并写条件（如「若抽到 X」）
+[*]状态标记：已尝试 ✔ / 推测 ? / 已确认 ★，支持备注、复制、撤销重做
+[*]自由总览板：每条世界线的回合数/节点/分支/标记/累计战损一目了然，点击卡片直达
+[/list]
+
+[h2]顺手交互[/h2]
+[list]
+[*]悬浮按钮 / F8 开合面板；按钮可拖动、可收拢为屏幕两侧小箭头
+[*]按钮下快捷操作：记本回合 / 复制→新线
+[*]窗口自由拉伸；画布缩放 0.5–3x、平移
+[*]界面中英双语
+[/list]
+
+[h2]依赖 / 兼容[/h2]
+[list]
+[*]必须安装前置：RitsuLib ≥ 0.6.2（创意工坊 3747602295）
+[*]支持杀戮尖塔 2 v0.107.1 – v0.111.0（正式服 / 测试服）
+[/list]
+
+[h2]English[/h2]
+In-combat world-line notebook for Slay the Spire 2. Your current world line is auto-recorded: every card, potion, draw/discard/exhaust and end-of-turn step, with the hand you had, the state at that moment, targets and damage dealt, numbered same-name enemies, and between-turn notes (enemy card insertions, HP lost). Copy it into an editable world-line board to branch, speculate and annotate. Requires RitsuLib ≥ 0.6.2."
+	"changenote"		"首次发布 v0.6.1：自动记录当前世界线、世界线推演、自由总览、快捷操作与可收拢悬浮按钮。"
+	"visibility"		"0"
+}
