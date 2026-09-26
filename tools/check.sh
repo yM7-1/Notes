@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
+export DOTNET_ROOT
+export PATH="$DOTNET_ROOT:$PATH"
+
+STEAM_ROOT="${STEAM_ROOT:-/mnt/d/Steam}"
+STS2_DATA_DIR="${STS2_DATA_DIR:-$STEAM_ROOT/steamapps/common/Slay the Spire 2/data_sts2_windows_x86_64}"
+export STS2_DATA_DIR
+
+cd "$(dirname "$0")/.."
+
+REFS_DIR="${STS2_REFS_DIR:-$PWD/.refs/sts2-refs}"
+REF_MIN="$REFS_DIR/0.107.1"
+
+if [ ! -f "$REF_MIN/sts2.dll" ]; then
+  echo "!! min-version reference assemblies missing at $REF_MIN" >&2
+  echo "   run: bash tools/fetch-refs.sh" >&2
+  exit 1
+fi
+
+echo "==> build (installed game: $STS2_DATA_DIR)"
+dotnet build Notes.csproj -c Release -p:CopyModOnBuild=false \
+  -p:Sts2UseLocalGame=true \
+  -p:SteamRoot="$STEAM_ROOT" \
+  -p:Sts2DataDir="$STS2_DATA_DIR" \
+  -p:RitsuLibReferenceTarget=0.111.0 \
+  -v minimal -nologo
+
+echo "==> test (core)"
+dotnet test tests/Notes.Tests/Notes.Tests.csproj -c Release \
+  -v minimal -nologo
+
+echo "==> build (min game version 0.107.1)"
+dotnet build Notes.csproj -c Release -p:CopyModOnBuild=false \
+  -p:SteamRoot="$STEAM_ROOT" \
+  -p:Sts2DataDir="$REF_MIN" \
+  -p:RitsuLibReferenceTarget=0.107.1 \
+  -v minimal -nologo
+
+echo "==> check done"
