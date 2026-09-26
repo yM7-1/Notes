@@ -52,31 +52,6 @@ internal static class CardCatalog
         }
     }
 
-    /// <summary>Case-insensitive title / internal-entry search, capped for the UI.</summary>
-    public static IEnumerable<CardSnapshot> Search(string query, int max = 60)
-    {
-        var results = new List<CardSnapshot>();
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            return results;
-        }
-        query = query.Trim();
-        foreach (var card in All)
-        {
-            var title = TitleOf(card);
-            var entry = card.Id.Entry ?? "";
-            if (title.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-                || entry.Contains(query, StringComparison.OrdinalIgnoreCase))
-            {
-                results.Add(Snapshot(card));
-                if (results.Count >= max)
-                {
-                    break;
-                }
-            }
-        }
-        return results;
-    }
 
     public static CardSnapshot Snapshot(CardModel card) => new(
         RefId: card.Id.ToString(),

@@ -23,6 +23,7 @@ internal static class NotesPersistence
     private const string GlobalFile = "notes_boards";
 
     private static ModDataStore? _globalStore;
+    private static ModDataStoreCache<NotesGlobalData>? _globalCache;
     private static string? _runFilePathCache;
     private static string _lastWrittenJson = "";
 
@@ -51,6 +52,9 @@ internal static class NotesPersistence
                 defaultFactory: () => new NotesGlobalData(),
                 autoCreateIfMissing: true);
             _globalStore = store;
+            // Cache-aware access: the wrapper reloads itself when the profile
+            // changes, so we never keep serving the previous profile's boards.
+            _globalCache = store.CreateCache<NotesGlobalData>(GlobalKey);
         }
         catch (Exception ex)
         {
@@ -121,10 +125,38 @@ internal static class NotesPersistence
         return "unknown";
     }
 
-    public static NotesDocument LoadRun(RunState state, out List<NotesOpData> ops, out string combatKey)
+    /// <summary>Moves an unusable run file aside so a fresh one can be written
+    /// without destroying the original data. Returns the backup file name.</summary>
+    private static string QuarantineRunFile(string reason)
+    {
+        try
+        {
+            var path = RunFilePath;
+            if (!File.Exists(path))
+            {
+                return "";
+            }
+            var backup = path + ".corrupt-" + DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            File.Move(path, backup, overwrite: true);
+            Log.Error($"[Notes] run notes quarantined ({reason}) -> {Path.GetFileName(backup)}");
+            return Path.GetFileName(backup);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] quarantine failed: " + ex);
+            return "";
+        }
+    }
+
+    public static NotesDocument LoadRun(
+        RunState state,
+        out List<NotesOpData> ops,
+        out string combatKey,
+        out string loadWarning)
     {
         ops = new List<NotesOpData>();
         combatKey = "";
+        loadWarning = "";
         try
         {
             var path = RunFilePath;
@@ -137,6 +169,16 @@ internal static class NotesPersistence
             {
                 return new NotesDocument();
             }
+            if (payload.Document.Version > NotesDocument.CurrentVersion)
+            {
+                // Written by a newer mod version: we cannot understand its data,
+                // so keep it aside instead of re-saving a lossy copy over it.
+                var backup = QuarantineRunFile("version " + payload.Document.Version);
+                loadWarning = ModLocalization.T("load_newer",
+                        "笔记存档来自更新版本，已备份并新建：{0}")
+                    .Replace("{0}", backup);
+                return new NotesDocument();
+            }
             ops = payload.Ops ?? new List<NotesOpData>();
             combatKey = payload.CombatKey ?? "";
             _lastWrittenJson = "";
@@ -145,6 +187,13 @@ internal static class NotesPersistence
         catch (Exception ex)
         {
             Log.Error("[Notes] run notes load failed: " + ex);
+            var backup = QuarantineRunFile("unreadable");
+            if (backup.Length > 0)
+            {
+                loadWarning = ModLocalization.T("load_corrupt",
+                        "笔记存档损坏，已备份并新建：{0}")
+                    .Replace("{0}", backup);
+            }
         }
         return new NotesDocument();
     }
@@ -221,6 +270,11 @@ internal static class NotesPersistence
     {
         try
         {
+            if (_globalCache != null)
+            {
+                document = _globalCache.Value.Document;
+                return true;
+            }
             if (_globalStore != null)
             {
                 var data = _globalStore.Get<NotesGlobalData>(GlobalKey);
@@ -267,6 +321,11 @@ internal static class NotesPersistence
     {
         try
         {
+            if (_globalCache != null)
+            {
+                data = _globalCache.Value;
+                return true;
+            }
             if (_globalStore != null)
             {
                 var live = _globalStore.Get<NotesGlobalData>(GlobalKey);

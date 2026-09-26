@@ -9,11 +9,4 @@ public sealed class NotesWorldLine
     public string Name { get; set; } = "";
 
     public long CreatedAtUnix { get; set; }
-
-    public NotesWorldLine Clone() => new()
-    {
-        Id = Id,
-        Name = Name,
-        CreatedAtUnix = CreatedAtUnix,
-    };
 }

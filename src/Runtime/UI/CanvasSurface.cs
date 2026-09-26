@@ -462,12 +462,24 @@ public partial class CanvasSurface : Control
         var zoom = Scale.X <= 0.01f ? 1f : Scale.X;
         var center = (_canvas.Size / 2f - Position) / zoom;
         var readOnly = _board?.IsReadOnly ?? false;
-        var title = readOnly
-            ? ModLocalization.T("empty_current_title", "本回合暂无记录")
-            : ModLocalization.T("empty_board_title", "空画板");
-        var hint = readOnly
-            ? ModLocalization.T("empty_current_hint", "战斗中的操作会自动记录在这里")
-            : ModLocalization.T("empty_board_hint", "从右侧拖入卡牌，或点「记本回合」录入本回合");
+        string title;
+        string hint;
+        if (readOnly)
+        {
+            title = ModLocalization.T("empty_current_title", "本回合暂无记录");
+            hint = ModLocalization.T("empty_current_hint", "战斗中的操作会自动记录在这里");
+        }
+        else if (_board?.Kind == BoardKind.WorldLine)
+        {
+            title = ModLocalization.T("empty_board_title", "空画板");
+            hint = ModLocalization.T("empty_board_hint", "从右侧拖入卡牌，或点「记本回合」录入本回合");
+        }
+        else
+        {
+            // Free / overview boards cannot record turns; do not suggest it.
+            title = ModLocalization.T("empty_free_title", "自由画板");
+            hint = ModLocalization.T("empty_free_hint", "拖入卡牌或文字自由推演；记录战斗回合请先「+ 世界线」");
+        }
         var titleSize = font.GetStringSize(title, HorizontalAlignment.Left, -1, 15);
         var hintSize = font.GetStringSize(hint, HorizontalAlignment.Left, -1, 11);
         DrawString(font, center - new Vector2(titleSize.X / 2f, 2f), title,

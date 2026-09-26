@@ -17,6 +17,8 @@ public partial class NotesLayer : CanvasLayer
     private VBoxContainer _box = null!;
     private DragHandle _toggle = null!;
     private HBoxContainer _quickRow = null!;
+    private Label _toast = null!;
+    private double _toastTimer;
     private Button _collapseButton = null!;
     private NotesWindow _window = null!;
     private bool _positionApplied;
@@ -77,7 +79,11 @@ public partial class NotesLayer : CanvasLayer
             TooltipText = ModLocalization.T("quick_record_turn_tip", "Record this turn into the current world line"),
         };
         UiStyle.StyleButton(recordTurn, accent: true, fontSize: 11);
-        recordTurn.Pressed += () => NotesRuntime.Import(currentTurnOnly: true);
+        recordTurn.Pressed += () =>
+        {
+            NotesRuntime.Import(currentTurnOnly: true);
+            ShowToast(NotesRuntime.LastImportMessage);
+        };
         _quickRow.AddChild(recordTurn);
         var recordCombat = new Button
         {
@@ -86,8 +92,25 @@ public partial class NotesLayer : CanvasLayer
                 "把当前世界线复制成可交互的世界线画板（录入/更改/预测）"),
         };
         UiStyle.StyleButton(recordCombat, fontSize: 11);
-        recordCombat.Pressed += () => NotesRuntime.CopyCurrentToNewLine();
+        recordCombat.Pressed += () =>
+        {
+            NotesRuntime.CopyCurrentToNewLine();
+            ShowToast(NotesRuntime.LastImportMessage);
+        };
         _quickRow.AddChild(recordCombat);
+
+        // Transient result message: the window may be closed, so the quick
+        // buttons must not look like they did nothing.
+        _toast = new Label
+        {
+            Visible = false,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            CustomMinimumSize = new Vector2(HandleWidth, 0),
+            SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin,
+        };
+        _toast.AddThemeFontSizeOverride("font_size", 10);
+        _toast.AddThemeColorOverride("font_color", UiStyle.Accent);
+        _box.AddChild(_toast);
 
         _window = new NotesWindow { Name = "NotesWindow" };
         AddChild(_window);
@@ -116,6 +139,14 @@ public partial class NotesLayer : CanvasLayer
     public override void _Process(double delta)
     {
         NotesRuntime.Tick(delta);
+        if (_toast.Visible)
+        {
+            _toastTimer -= delta;
+            if (_toastTimer <= 0)
+            {
+                _toast.Visible = false;
+            }
+        }
         if (!_positionApplied && !_handleDragged && NotesRuntime.GlobalLoaded)
         {
             _positionApplied = true;
@@ -142,6 +173,17 @@ public partial class NotesLayer : CanvasLayer
             Toggle();
             GetViewport().SetInputAsHandled();
         }
+    }
+
+    private void ShowToast(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return;
+        }
+        _toast.Text = message;
+        _toast.Visible = true;
+        _toastTimer = 3.5;
     }
 
     private void OnHandleActivated()

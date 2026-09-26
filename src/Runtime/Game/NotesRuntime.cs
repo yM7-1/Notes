@@ -92,7 +92,9 @@ internal static class NotesRuntime
     }
 
     private static bool _globalLoaded;
+    private static bool _globalStoreMissingLogged;
     private static float _retryTimer;
+    private static float _globalCheckTimer;
     private static bool _runDirty;
     private static bool _globalDirty;
     private static double _saveTimer;
@@ -121,7 +123,11 @@ internal static class NotesRuntime
         var run = GameContext.CurrentRun;
         if (run != null)
         {
-            RunDocument = NotesPersistence.LoadRun(run, out var ops, out _combatKey);
+            RunDocument = NotesPersistence.LoadRun(run, out var ops, out _combatKey, out var loadWarning);
+            if (loadWarning.Length > 0)
+            {
+                LastImportMessage = loadWarning;
+            }
             RunDocument.EnsureOverviewBoard(OverviewBoardName());
             RunDocument.EnsureCurrentBoard(CurrentBoardName());
             NotesOpLog.Load(ops);
@@ -158,8 +164,15 @@ internal static class NotesRuntime
 
     public static void SetActiveBoard(string boardId)
     {
+        if (ActiveDocument.ActiveBoardId == boardId)
+        {
+            return;
+        }
         HoverNodeId = "";
         ActiveDocument.ActiveBoardId = boardId;
+        // The undo stack is per visible board: undoing an edit that belongs to
+        // a board the player is no longer looking at would be invisible damage.
+        Commands.Clear();
         Raise();
     }
 
@@ -346,6 +359,19 @@ internal static class NotesRuntime
         }
     }
 
+    /// <summary>True once the player dismissed the first-run guide.</summary>
+    public static bool OnboardingSeen =>
+        NotesPersistence.TryGetGlobalData(out var data) && data.OnboardingSeen;
+
+    public static void MarkOnboardingSeen()
+    {
+        if (NotesPersistence.TryGetGlobalData(out var data))
+        {
+            data.OnboardingSeen = true;
+            NotesPersistence.SaveGlobalNow();
+        }
+    }
+
     public static bool TryGetHandleState(out bool collapsed, out int side)
     {
         if (NotesPersistence.TryGetGlobalData(out var data))
@@ -368,6 +394,17 @@ internal static class NotesRuntime
             {
                 _retryTimer = 0f;
                 EnsureGlobalLoaded();
+            }
+        }
+        else if (_globalLoaded)
+        {
+            // Cheap identity check: RitsuLib's cache reloads after a profile
+            // switch, and we must not keep serving the old profile's boards.
+            _globalCheckTimer += (float)delta;
+            if (_globalCheckTimer >= 1f)
+            {
+                _globalCheckTimer = 0f;
+                EnsureGlobalFresh();
             }
         }
 
@@ -814,6 +851,37 @@ internal static class NotesRuntime
         {
             GlobalDocument = document;
             _globalLoaded = true;
+            _globalStoreMissingLogged = false;
+        }
+        else if (!_globalStoreMissingLogged)
+        {
+            _globalStoreMissingLogged = true;
+            MegaCrit.Sts2.Core.Logging.Log.Info(
+                "[Notes] global store not ready yet; retrying in the background");
+        }
+    }
+
+    /// <summary>Picks up a global document reload (profile switch) instead of
+    /// keeping the previous profile's boards in memory.</summary>
+    private static void EnsureGlobalFresh()
+    {
+        try
+        {
+            if (NotesPersistence.TryLoadGlobal(out var document)
+                && !ReferenceEquals(document, GlobalDocument))
+            {
+                GlobalDocument = document;
+                MegaCrit.Sts2.Core.Logging.Log.Info("[Notes] global library reloaded (profile changed)");
+                if (Library == NotesLibrary.Global)
+                {
+                    Commands.Clear();
+                    Raise();
+                }
+            }
+        }
+        catch
+        {
+            // best effort only
         }
     }
 }

@@ -162,5 +162,17 @@
   "empty_current_hint": "战斗中的操作会自动记录在这里",
   "empty_board_title": "空画板",
   "empty_board_hint": "从右侧拖入卡牌，或点「记本回合」录入本回合",
-  "palette_upgrade_tip": "右键切换升级 +"
+  "palette_upgrade_tip": "右键切换升级 +",
+  "load_corrupt": "笔记存档损坏，已备份并新建：{0}",
+  "load_newer": "笔记存档来自更新版本，已备份并新建：{0}",
+  "onboarding_title": "怎么用：",
+  "onboarding_step1": "战斗中的操作会自动记录在「当前世界线」（只读）",
+  "onboarding_step2": "点「复制→新世界线」得到可编辑画板，再拖卡牌/连分支",
+  "onboarding_step3": "用 ✔ / ? / ★ 标记试过的打法，在「自由总览」对比",
+  "onboarding_dismiss": "知道了",
+  "readonly_suffix": "只读",
+  "node_tip_readonly": "（只读）点「复制→新世界线」后可编辑",
+  "node_tip_edit": "双击编辑 · 右键菜单",
+  "empty_free_title": "自由画板",
+  "empty_free_hint": "拖入卡牌或文字自由推演；记录战斗回合请先「+ 世界线」"
 }

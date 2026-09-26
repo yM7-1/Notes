@@ -162,5 +162,17 @@
   "empty_current_hint": "Combat actions show up here automatically",
   "empty_board_title": "Empty board",
   "empty_board_hint": "Drag a card from the right, or hit “Record turn”",
-  "palette_upgrade_tip": "Right-click toggles upgraded +"
+  "palette_upgrade_tip": "Right-click toggles upgraded +",
+  "load_corrupt": "Notes save was corrupt; backed up as {0} and started fresh",
+  "load_newer": "Notes save came from a newer version; backed up as {0} and started fresh",
+  "onboarding_title": "How it works:",
+  "onboarding_step1": "Combat actions are auto-recorded on the read-only Current line",
+  "onboarding_step2": "Hit “Copy → new line” for an editable board, then drag cards / link branches",
+  "onboarding_step3": "Mark what you tried with ✔ / ? / ★ and compare on the Overview board",
+  "onboarding_dismiss": "Got it",
+  "readonly_suffix": "read-only",
+  "node_tip_readonly": "(read-only) copy it to a new line to edit",
+  "node_tip_edit": "Double-click to edit · right-click for menu",
+  "empty_free_title": "Free board",
+  "empty_free_hint": "Drag cards or text to sketch; create a world line (+ World line) to record turns"
 }

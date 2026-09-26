@@ -97,6 +97,9 @@ public partial class NodeControl : Control
         {
             text += "\n" + _node.Note;
         }
+        text += "\n" + (ReadOnly
+            ? ModLocalization.T("node_tip_readonly", "（只读）点「复制→新世界线」后可编辑")
+            : ModLocalization.T("node_tip_edit", "双击编辑 · 右键菜单"));
         TooltipText = text;
     }
 

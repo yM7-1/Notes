@@ -58,8 +58,6 @@ public partial class BoardCanvas : Control
 
     public bool LinkMode => _linkMode;
 
-    public string? LinkFromId => _linkFrom;
-
     public string? ActiveLinkSource => _linkFrom;
 
     public bool SlotHint => _dragActive || _dragNode != null;
@@ -791,17 +789,6 @@ public partial class BoardCanvas : Control
         {
             NotesRuntime.Commands.Execute(new CompositeCommand(commands, "MoveNode"));
         }
-        NotesRuntime.Raise();
-    }
-
-    public void CommitNodeMove(string nodeId, Vector2 from, Vector2 to)
-    {
-        if (_board == null)
-        {
-            return;
-        }
-        NotesRuntime.Commands.PushApplied(new MoveNodeCommand(
-            NotesRuntime.ActiveDocument, _board.Id, nodeId, from.X, from.Y, to.X, to.Y));
         NotesRuntime.Raise();
     }
 

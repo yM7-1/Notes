@@ -11,8 +11,24 @@ export STS2_DATA_DIR
 
 cd "$(dirname "$0")/.."
 
-REFS_DIR="${STS2_REFS_DIR:-$PWD/.refs/sts2-refs}"
-REF_MIN="$REFS_DIR/0.107.1"
+echo "==> version sync (csproj / manifest / workshop manifest / changenote)"
+VERSION=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Notes.csproj | head -1)
+[ -n "$VERSION" ] || { echo "!! no <Version> in Notes.csproj" >&2; exit 1; }
+for file in Notes.json packaging/workshop/content/Notes/Notes.json; do
+  file_version=$(sed -n 's|.*"version": *"\([^"]*\)".*|\1|p' "$file" | head -1)
+  if [ "$file_version" != "$VERSION" ]; then
+    echo "!! version drift: $file has '$file_version', Notes.csproj has '$VERSION'" >&2
+    exit 1
+  fi
+done
+if ! grep -q "v$VERSION" packaging/workshop/Notes_workshop.vdf; then
+  echo "!! workshop changenote does not mention v$VERSION" >&2
+  exit 1
+fi
+echo "    v$VERSION ok"
+
+REF_DIR="${STS2_REFS_DIR:-$PWD/.refs/sts2-refs}"
+REF_MIN="$REF_DIR/0.107.1"
 
 if [ ! -f "$REF_MIN/sts2.dll" ]; then
   echo "!! min-version reference assemblies missing at $REF_MIN" >&2

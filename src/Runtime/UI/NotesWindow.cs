@@ -24,6 +24,7 @@ public partial class NotesWindow : Control
     private CardPalette _palette = null!;
     private InspectorPanel _inspector = null!;
     private ConfirmationDialog _deleteConfirm = null!;
+    private PanelContainer _onboarding = null!;
     private Panel _grip = null!;
     private bool _updating;
     private bool _resizing;
@@ -166,6 +167,28 @@ public partial class NotesWindow : Control
 
         actions.AddChild(MakeButton(ModLocalization.T("reset_view", "Reset"),
             () => _canvas.ResetView(), ModLocalization.T("reset_view_tip", "重置缩放与平移")));
+
+        // First-run guide (once per profile): explains the core loop.
+        _onboarding = new PanelContainer { Visible = false };
+        _onboarding.AddThemeStyleboxOverride("panel",
+            UiStyle.Box(UiStyle.PanelBg, UiStyle.Accent.Lerp(UiStyle.PanelBorder, 0.4f), 8, 1));
+        var guide = new HBoxContainer();
+        guide.AddThemeConstantOverride("separation", 8);
+        _onboarding.AddChild(guide);
+        var guideText = new Label
+        {
+            Text = ModLocalization.T("onboarding_title", "怎么用：") + "\n"
+                + "① " + ModLocalization.T("onboarding_step1", "战斗中的操作会自动记录在「当前世界线」（只读）") + "\n"
+                + "② " + ModLocalization.T("onboarding_step2", "点「复制→新世界线」得到可编辑画板，再拖卡牌/连分支") + "\n"
+                + "③ " + ModLocalization.T("onboarding_step3", "用 ✔ / ? / ★ 标记试过的打法，在「自由总览」对比"),
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        guideText.AddThemeFontSizeOverride("font_size", 11);
+        guideText.AddThemeColorOverride("font_color", UiStyle.TextMain);
+        guide.AddChild(guideText);
+        guide.AddChild(MakeButton(ModLocalization.T("onboarding_dismiss", "知道了"), DismissOnboarding));
+        root.AddChild(_onboarding);
 
         var body = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         body.AddThemeConstantOverride("separation", 8);
@@ -321,7 +344,17 @@ public partial class NotesWindow : Control
 
     public void OnShown()
     {
+        if (!NotesRuntime.OnboardingSeen)
+        {
+            _onboarding.Visible = true;
+        }
         RefreshHeader();
+    }
+
+    private void DismissOnboarding()
+    {
+        _onboarding.Visible = false;
+        NotesRuntime.MarkOnboardingSeen();
     }
 
     public override void _UnhandledKeyInput(InputEvent @event)
@@ -401,8 +434,11 @@ public partial class NotesWindow : Control
             var selected = 0;
             for (var i = 0; i < document.Boards.Count; i++)
             {
-                _boardPicker.AddItem(document.Boards[i].Name);
-                if (active != null && document.Boards[i].Id == active.Id)
+                var board = document.Boards[i];
+                _boardPicker.AddItem(board.Name + (board.IsReadOnly
+                    ? "  ·  " + ModLocalization.T("readonly_suffix", "只读")
+                    : ""));
+                if (active != null && board.Id == active.Id)
                 {
                     selected = i;
                 }
@@ -443,8 +479,8 @@ public partial class NotesWindow : Control
             var import = NotesRuntime.LastImportMessage;
             _status.Text = combat
                 + "  ·  " + ModLocalization.T("status_ops", "Ops") + " " + NotesRuntime.OpsCount
-                + (import.Length > 0 ? "  ·  " + import : "")
-                + "  ·  " + hint;
+                + "  ·  " + hint
+                + (import.Length > 0 ? "  ·  " + import : "");
             _status.TooltipText = _status.Text;
         }
         finally

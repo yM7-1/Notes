@@ -283,47 +283,6 @@ public sealed class NotesDocument
         return line;
     }
 
-    public NotesWorldLine AddWorldLine(string boardId, string? name = null)
-    {
-        var board = FindBoard(boardId) ?? throw new InvalidOperationException("board not found");
-        var line = new NotesWorldLine
-        {
-            Id = IdFactory.NewWorldLineId(),
-            Name = string.IsNullOrWhiteSpace(name) ? $"World {board.WorldLines.Count + 1}" : name.Trim(),
-            CreatedAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-        };
-        board.WorldLines.Add(line);
-        return line;
-    }
-
-    public bool InsertWorldLine(string boardId, int index, NotesWorldLine line)
-    {
-        var board = FindBoard(boardId);
-        if (board == null || board.FindWorldLine(line.Id) != null)
-        {
-            return false;
-        }
-        board.WorldLines.Insert(Math.Clamp(index, 0, board.WorldLines.Count), line);
-        return true;
-    }
-
-    /// <summary>Removes a world line with its regions, structured nodes and edges.</summary>
-    public bool RemoveWorldLine(string boardId, string worldLineId)
-    {
-        var board = FindBoard(boardId);
-        var line = board?.FindWorldLine(worldLineId);
-        if (board == null || line == null)
-        {
-            return false;
-        }
-        foreach (var region in board.RegionsOf(worldLineId).ToList())
-        {
-            RemoveTurnRegion(boardId, region.Id);
-        }
-        board.WorldLines.Remove(line);
-        return true;
-    }
-
     public NotesTurnRegion EnsureTurnRegion(string boardId, string worldLineId, int turnNumber)
     {
         var board = FindBoard(boardId) ?? throw new InvalidOperationException("board not found");

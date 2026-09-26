@@ -25,4 +25,7 @@ public sealed class NotesGlobalData
 
     /// <summary>0 = right edge, 1 = left edge (used while collapsed).</summary>
     public int HandleSide { get; set; }
+
+    /// <summary>The first-run "how it works" strip was dismissed.</summary>
+    public bool OnboardingSeen { get; set; }
 }

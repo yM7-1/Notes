@@ -29,6 +29,8 @@ internal static class NotesOpLog
     private const long ExhaustWindowMs = 1500;
     private const long DamageCauseWindowMs = 10_000;
     private const int DiagnosticEventLimit = 5;
+    private const int ErrorLogLimit = 3;
+    private static readonly Dictionary<string, int> _errorCounts = new(StringComparer.Ordinal);
 
     private static readonly List<NotesOpData> Ops = new();
     private static readonly object Gate = new();
@@ -125,6 +127,7 @@ internal static class NotesOpLog
         Clear();
         _turn = 0;
         _diagnostics = 0;
+        _errorCounts.Clear();
         // Number same-named enemies left-to-right up front so the numbering is
         // stable even after some of them die.
         lock (Gate)
@@ -197,7 +200,7 @@ internal static class NotesOpLog
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] turn-start capture failed: " + ex);
+            LogCaptureError("turn-start capture", ex);
         }
     }
 
@@ -228,7 +231,7 @@ internal static class NotesOpLog
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] turn-end capture failed: " + ex);
+            LogCaptureError("turn-end capture", ex);
         }
     }
 
@@ -251,7 +254,7 @@ internal static class NotesOpLog
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] end-turn hand capture failed: " + ex);
+            LogCaptureError("end-turn hand capture", ex);
         }
     }
 
@@ -284,7 +287,7 @@ internal static class NotesOpLog
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] card-play capture failed: " + ex);
+            LogCaptureError("card-play capture", ex);
         }
     }
 
@@ -316,7 +319,7 @@ internal static class NotesOpLog
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] pile capture failed: " + ex);
+            LogCaptureError("pile capture", ex);
         }
     }
 
@@ -336,7 +339,7 @@ internal static class NotesOpLog
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] potion capture failed: " + ex);
+            LogCaptureError("potion capture", ex);
         }
     }
 
@@ -364,7 +367,7 @@ internal static class NotesOpLog
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] relic capture failed: " + ex);
+            LogCaptureError("relic capture", ex);
         }
     }
 
@@ -427,7 +430,7 @@ internal static class NotesOpLog
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] damage capture failed: " + ex);
+            LogCaptureError("damage capture", ex);
         }
     }
 
@@ -474,17 +477,25 @@ internal static class NotesOpLog
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] generated-card capture failed: " + ex);
+            LogCaptureError("generated-card capture", ex);
         }
     }
 
     /// <summary>MonsterModel.PerformMove prefix: remembers the acting monster so
-    /// cards it inserts during the move can be attributed to it.</summary>
+    /// cards it inserts during the move can be attributed to it. Guarded like
+    /// every other capture hook: an exception here would abort the enemy move.</summary>
     public static void OnMonsterMoveStart(MonsterModel monster)
     {
-        lock (Gate)
+        try
         {
-            _performingMonster = monster.Creature;
+            lock (Gate)
+            {
+                _performingMonster = monster.Creature;
+            }
+        }
+        catch (Exception ex)
+        {
+            LogCaptureError("monster move start capture", ex);
         }
     }
 
@@ -492,13 +503,20 @@ internal static class NotesOpLog
     /// the attribution window and freezes the monster's display name.</summary>
     public static void OnMonsterMoveEnd(MonsterModel monster)
     {
-        lock (Gate)
+        try
         {
-            _performingMonster = null;
-            if (monster.Creature != null)
+            lock (Gate)
             {
-                EnsureEnemyName(monster.Creature);
+                _performingMonster = null;
+                if (monster.Creature != null)
+                {
+                    EnsureEnemyName(monster.Creature);
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            LogCaptureError("monster move end capture", ex);
         }
     }
 
@@ -719,8 +737,9 @@ internal static class NotesOpLog
             }
             return (string.Join("\n", parts), creature.CurrentHp, creature.MaxHp);
         }
-        catch
+        catch (Exception ex)
         {
+            LogCaptureError("snapshot build", ex);
             return ("", -1, -1);
         }
     }
@@ -878,6 +897,22 @@ internal static class NotesOpLog
         }
         _diagnostics++;
         Log.Info("[Notes] capture: " + message);
+    }
+
+    /// <summary>Rate-limited error log for the hot capture paths: a broken
+    /// capture must not spam the log once per card/hit. Counters reset per combat.</summary>
+    private static void LogCaptureError(string site, Exception ex)
+    {
+        var count = _errorCounts.TryGetValue(site, out var current) ? current : 0;
+        _errorCounts[site] = count + 1;
+        if (count < ErrorLogLimit)
+        {
+            Log.Error($"[Notes] {site} failed: " + ex);
+            if (count + 1 == ErrorLogLimit)
+            {
+                Log.Error($"[Notes] {site}: further errors suppressed for this combat");
+            }
+        }
     }
 
     private static string RelicTitle(RelicModel relic)
