@@ -26,7 +26,7 @@ public sealed class NotesBoard
 
     public List<NotesTurnRegion> TurnRegions { get; set; } = new();
 
-    /// <summary>View pan (canvas-local pixels) and zoom (0.5 - 2.0).</summary>
+    /// <summary>View pan (canvas-local pixels) and zoom (0.5 - 3.0).</summary>
     public float PanX { get; set; }
 
     public float PanY { get; set; }

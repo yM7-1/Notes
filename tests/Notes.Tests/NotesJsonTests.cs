@@ -77,7 +77,7 @@ public class NotesJsonTests
 
         var board = Assert.Single(normalized.Boards);
         Assert.False(string.IsNullOrWhiteSpace(board.Id));
-        Assert.Equal(2f, board.Zoom);
+        Assert.Equal(3f, board.Zoom);
         Assert.False(string.IsNullOrWhiteSpace(board.Nodes[0].Id));
         Assert.Empty(board.Edges);
         Assert.Equal(board.Id, normalized.ActiveBoardId);

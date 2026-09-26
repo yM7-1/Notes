@@ -38,6 +38,52 @@ public partial class CanvasSurface : Control
         _labelBox.ContentMarginRight = 5;
         _labelBox.ContentMarginTop = 1;
         _labelBox.ContentMarginBottom = 1;
+        UpdateDrawRect();
+    }
+
+    /// <summary>Godot culls a Control's custom drawing by its rect; this surface
+    /// draws content far outside a 0-sized rect (and with negative coordinates
+    /// when panned), so give it a content-sized rect and an explicit custom
+    /// cull rect that always covers the board. Without this, zooming in pans
+    /// the surface origin off-screen and the regions / boundary chips vanish
+    /// while the child node controls stay visible.</summary>
+    private void UpdateDrawRect()
+    {
+        var maxX = 2400f;
+        var maxY = 1800f;
+        var minX = 0f;
+        var minY = 0f;
+        if (_board != null)
+        {
+            foreach (var region in _board.TurnRegions)
+            {
+                maxX = MathF.Max(maxX, region.X + region.Width + 240f);
+                maxY = MathF.Max(maxY, region.Y + region.Height + 240f);
+                minX = MathF.Min(minX, region.X - 240f);
+                minY = MathF.Min(minY, region.Y - 240f);
+            }
+            foreach (var node in _board.Nodes)
+            {
+                maxX = MathF.Max(maxX, node.X + NodeControl.NodeWidth + 240f);
+                maxY = MathF.Max(maxY, node.Y + NodeControl.NodeHeight + 240f);
+                minX = MathF.Min(minX, node.X - 240f);
+                minY = MathF.Min(minY, node.Y - 240f);
+            }
+            if (_board.Kind == BoardKind.Overview)
+            {
+                foreach (var card in NotesLayout.OverviewCards(NotesRuntime.ActiveDocument))
+                {
+                    maxX = MathF.Max(maxX, card.X + card.Width + 240f);
+                    maxY = MathF.Max(maxY, card.Y + card.Height + 240f);
+                }
+            }
+        }
+        Size = new Vector2(maxX, maxY);
+        RenderingServer.CanvasItemSetCustomRect(
+            GetCanvasItem(),
+            true,
+            new Rect2(minX - 4096f, minY - 4096f,
+                maxX - minX + 8192f, maxY - minY + 8192f));
     }
 
     public void RefreshNodeDraw()
@@ -64,6 +110,7 @@ public partial class CanvasSurface : Control
                 AddNodeControl(node);
             }
         }
+        UpdateDrawRect();
         QueueRedraw();
     }
 
@@ -94,6 +141,7 @@ public partial class CanvasSurface : Control
             pair.Value.QueueFree();
             _nodes.Remove(pair.Key);
         }
+        UpdateDrawRect();
         QueueRedraw();
     }
 

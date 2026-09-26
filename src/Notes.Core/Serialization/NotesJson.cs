@@ -54,7 +54,7 @@ public static class NotesJson
             board.Edges ??= new List<NotesEdge>();
             board.WorldLines ??= new List<NotesWorldLine>();
             board.TurnRegions ??= new List<NotesTurnRegion>();
-            board.Zoom = Math.Clamp(board.Zoom <= 0f ? 1f : board.Zoom, 0.5f, 2f);
+            board.Zoom = Math.Clamp(board.Zoom <= 0f ? 1f : board.Zoom, 0.5f, 3f);
 
             var seenLines = new HashSet<string>(StringComparer.Ordinal);
             foreach (var line in board.WorldLines)

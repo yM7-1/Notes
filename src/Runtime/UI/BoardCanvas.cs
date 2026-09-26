@@ -187,7 +187,9 @@ public partial class BoardCanvas : Control
 
     private void OnRuntimeChanged()
     {
-        _board = NotesRuntime.ActiveBoard;
+        var board = NotesRuntime.ActiveBoard;
+        var sameBoard = ReferenceEquals(_board, board);
+        _board = board;
         if (_board != null)
         {
             NotesLayout.Apply(_board);
@@ -200,7 +202,14 @@ public partial class BoardCanvas : Control
         {
             _dragNode = null;
         }
-        _surface.SetBoard(_board);
+        if (sameBoard)
+        {
+            _surface.Refresh(); // reuse node controls (stable hover / selection)
+        }
+        else
+        {
+            _surface.SetBoard(_board);
+        }
         ApplyView();
     }
 
@@ -332,7 +341,7 @@ public partial class BoardCanvas : Control
         {
             return;
         }
-        var zoom = Math.Clamp(_board.Zoom * factor, 0.5f, 2f);
+        var zoom = Math.Clamp(_board.Zoom * factor, 0.5f, 3f);
         if (Math.Abs(zoom - _board.Zoom) < 0.001f)
         {
             return;
