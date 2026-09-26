@@ -20,3 +20,6 @@ TestResults/
 
 # autopilot 运行状态
 .autopilot/
+
+# 工坊主图/验收截图（不入库）
+mod_pic/
