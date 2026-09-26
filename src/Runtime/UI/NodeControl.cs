@@ -1,5 +1,6 @@
 using Godot;
 using Notes.Core.Documents;
+using Notes.Core.Services;
 using Notes.Game;
 
 namespace Notes.UI;
@@ -9,8 +10,9 @@ namespace Notes.UI;
 /// positioned by the layout engine and can be re-slotted by dragging.</summary>
 public partial class NodeControl : Control
 {
-    public const float NodeWidth = 184f;
-    public const float NodeHeight = 62f;
+    // Single source of truth lives in Notes.Core (the layout engine).
+    public const float NodeWidth = NotesLayout.NodeWidth;
+    public const float NodeHeight = NotesLayout.NodeHeight;
     private static readonly Vector2 PortOffset = new(NodeWidth - 11f, 11f);
 
     private BoardCanvas _canvas = null!;

@@ -49,6 +49,7 @@ internal static class NotesPersistence
                 key: GlobalKey,
                 fileName: GlobalFile,
                 scope: SaveScope.Profile,
+                syncToCloud: false, // the mod is local-only by design
                 defaultFactory: () => new NotesGlobalData(),
                 autoCreateIfMissing: true);
             _globalStore = store;
@@ -77,6 +78,7 @@ internal static class NotesPersistence
             }
             GameContext.CurrentRun = state;
             Log.Info("[Notes] run context acquired (seed=" + IdentityOf(state) + ")");
+            NotesOpLog.Initialize(); // retry in case mod init ran before CombatManager existed
             NotesRuntime.OnRunContextChanged();
         }
         catch (Exception ex)

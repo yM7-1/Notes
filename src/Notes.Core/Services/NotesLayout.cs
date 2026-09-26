@@ -208,6 +208,13 @@ public static class NotesLayout
         return !board.EdgesOfRegion(node.RegionId).Any(e => e.To == node.Id);
     }
 
+    /// <summary>Effective number of next-step slots for a node: an explicit
+    /// count wins, otherwise roots offer a parallel pair and later steps one.</summary>
+    public static int EffectiveSlotCount(NotesBoard board, NotesNode node) =>
+        node.NextSlotCount > 0
+            ? node.NextSlotCount
+            : (IsRoot(board, node) ? RootParallelSlots : 1);
+
     /// <summary>Free next-step slot positions for a region while the player is
     /// dragging an unplaced legend. Empty regions offer one root slot.</summary>
     public static List<NotesSlot> FreeSlots(NotesBoard board, NotesTurnRegion region)
@@ -226,9 +233,7 @@ public static class NotesLayout
 
         foreach (var node in nodes)
         {
-            var desired = node.NextSlotCount > 0
-                ? node.NextSlotCount
-                : (IsRoot(board, node) ? RootParallelSlots : 1);
+            var desired = EffectiveSlotCount(board, node);
             var existing = childCount.TryGetValue(node.Id, out var count) ? count : 0;
             var free = Math.Max(0, desired - existing);
             for (var i = 0; i < free; i++)

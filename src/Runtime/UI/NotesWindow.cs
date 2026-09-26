@@ -263,6 +263,7 @@ public partial class NotesWindow : Control
         NotesRuntime.OpsChanged += RefreshHeader;
         NotesRuntime.Changed += RefreshInspector;
         NotesRuntime.SelectionChanged += RefreshInspector;
+        NotesRuntime.HoverChanged += RefreshInspector;
         RefreshHeader();
         RefreshInspector();
     }
@@ -340,6 +341,7 @@ public partial class NotesWindow : Control
         NotesRuntime.OpsChanged -= RefreshHeader;
         NotesRuntime.Changed -= RefreshInspector;
         NotesRuntime.SelectionChanged -= RefreshInspector;
+        NotesRuntime.HoverChanged -= RefreshInspector;
     }
 
     public void OnShown()
@@ -564,7 +566,8 @@ public partial class NotesWindow : Control
                     {
                         lines.Add(ModLocalization.T("inspector_hp_range", "HP range") + ": " + stats.HpMin + " ~ " + stats.HpMax);
                     }
-                    if (board.WorldLines.Count > 0 && board.WorldLines[0].Id == line.Id
+                    if (board.Kind == BoardKind.Current
+                        && board.WorldLines.Count > 0 && board.WorldLines[0].Id == line.Id
                         && GameContext.LocalPlayer is { } player)
                     {
                         lines.Add(ModLocalization.T("inspector_live", "Live HP") + ": "

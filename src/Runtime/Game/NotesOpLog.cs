@@ -69,19 +69,28 @@ internal static class NotesOpLog
         }
     }
 
+    public static bool Initialized => _initialized;
+
     public static void Initialize()
     {
         if (_initialized)
         {
             return;
         }
-        _initialized = true;
-
-        var manager = CombatManager.Instance;
-        manager.TurnStarted += OnTurnStarted;
-        manager.TurnEnded += OnTurnEnded;
-        manager.PlayerEndedTurn += OnPlayerEndedTurn;
-        Log.Info("[Notes] op capture attached (CombatManager events + Harmony pile/card/potion hooks)");
+        try
+        {
+            var manager = CombatManager.Instance;
+            manager.TurnStarted += OnTurnStarted;
+            manager.TurnEnded += OnTurnEnded;
+            manager.PlayerEndedTurn += OnPlayerEndedTurn;
+            _initialized = true;
+            Log.Info("[Notes] op capture attached (CombatManager events + Harmony pile/card/potion hooks)");
+        }
+        catch (Exception ex)
+        {
+            // Marked attached only on success; callers retry later.
+            Log.Error("[Notes] op capture attach failed (will retry): " + ex);
+        }
     }
 
     public static void Clear()

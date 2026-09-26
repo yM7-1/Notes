@@ -27,6 +27,8 @@ public partial class CardPalette : PanelContainer
     private ScrollContainer _scroll = null!;
     private int _pendingScroll;
     private readonly HashSet<string> _upgradedKeys = new(StringComparer.Ordinal);
+    private bool _searchPending;
+    private double _searchDelay;
     private double _timer;
     private string _signature = "";
 
@@ -53,7 +55,12 @@ public partial class CardPalette : PanelContainer
 
         _search = new LineEdit { PlaceholderText = ModLocalization.T("palette_search", "Search all cards…") };
         UiStyle.StyleInput(_search);
-        _search.TextChanged += _ => Refresh(force: true);
+        _search.TextChanged += _ =>
+        {
+            // Debounced: rebuilding up to 120 styled rows per keystroke lags typing.
+            _searchPending = true;
+            _searchDelay = 0.18;
+        };
         root.AddChild(_search);
 
         _filters = new HBoxContainer();
@@ -102,6 +109,18 @@ public partial class CardPalette : PanelContainer
         {
             return;
         }
+        if (_searchPending)
+        {
+            _searchDelay -= delta;
+            if (_searchDelay <= 0)
+            {
+                _searchPending = false;
+                if (_tab == Tab.Codex)
+                {
+                    Refresh(force: true);
+                }
+            }
+        }
         _timer += delta;
         if (_timer < 0.35)
         {
@@ -116,7 +135,7 @@ public partial class CardPalette : PanelContainer
 
     private Button MakeTab(string text, Tab tab)
     {
-        var button = new Button { Text = text, ToggleMode = true, FocusMode = FocusModeEnum.None };
+        var button = new Button { Text = text, ToggleMode = true };
         UiStyle.StyleButton(button, fontSize: 11);
         button.Pressed += () => SelectTab(tab);
         return button;

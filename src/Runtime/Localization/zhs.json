@@ -174,5 +174,6 @@
   "node_tip_readonly": "（只读）点「复制→新世界线」后可编辑",
   "node_tip_edit": "双击编辑 · 右键菜单",
   "empty_free_title": "自由画板",
-  "empty_free_hint": "拖入卡牌或文字自由推演；记录战斗回合请先「+ 世界线」"
+  "empty_free_hint": "拖入卡牌或文字自由推演；记录战斗回合请先「+ 世界线」",
+  "copy_no_run": "没有进行中的游戏，暂时无法复制世界线"
 }

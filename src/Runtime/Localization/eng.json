@@ -174,5 +174,6 @@
   "node_tip_readonly": "(read-only) copy it to a new line to edit",
   "node_tip_edit": "Double-click to edit · right-click for menu",
   "empty_free_title": "Free board",
-  "empty_free_hint": "Drag cards or text to sketch; create a world line (+ World line) to record turns"
+  "empty_free_hint": "Drag cards or text to sketch; create a world line (+ World line) to record turns",
+  "copy_no_run": "No run in progress; nothing to copy yet"
 }

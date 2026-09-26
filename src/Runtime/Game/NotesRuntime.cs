@@ -41,6 +41,10 @@ internal static class NotesRuntime
     /// <summary>Raised when the inspected node / region / world line changes.</summary>
     public static event Action? SelectionChanged;
 
+    /// <summary>Raised when the hovered node changes; hover only affects the
+    /// inspector and the hovered control itself, so it is a separate, cheap event.</summary>
+    public static event Action? HoverChanged;
+
     public static NotesSelectionKind SelectionKind { get; private set; } = NotesSelectionKind.None;
 
     public static string SelectionId { get; private set; } = "";
@@ -56,7 +60,7 @@ internal static class NotesRuntime
             return;
         }
         HoverNodeId = nodeId;
-        SelectionChanged?.Invoke();
+        HoverChanged?.Invoke();
     }
 
     public static void ClearHoverNode(string nodeId)
@@ -66,7 +70,7 @@ internal static class NotesRuntime
             return;
         }
         HoverNodeId = "";
-        SelectionChanged?.Invoke();
+        HoverChanged?.Invoke();
     }
 
     /// <summary>Short feedback for the last import action (shown in the status bar).</summary>
@@ -95,8 +99,11 @@ internal static class NotesRuntime
     private static bool _globalStoreMissingLogged;
     private static float _retryTimer;
     private static float _globalCheckTimer;
+    private static float _opLogRetryTimer;
+    private static bool _layoutErrorLogged;
     private static bool _runDirty;
     private static bool _globalDirty;
+    private static bool _opsDirty;
     private static double _saveTimer;
     private static string _combatKey = "";
 
@@ -107,7 +114,15 @@ internal static class NotesRuntime
     public static NotesDocument ActiveDocument =>
         Library == NotesLibrary.Run && RunActive ? RunDocument : GlobalDocument;
 
-    public static NotesBoard ActiveBoard => ActiveDocument.EnsureActiveBoard();
+    public static NotesBoard ActiveBoard
+    {
+        get
+        {
+            var document = ActiveDocument;
+            return document.ActiveBoard ?? document.EnsureActiveBoard(
+                ModLocalization.T("board_new_name", "画板") + " " + (document.Boards.Count + 1));
+        }
+    }
 
     public static void Initialize()
     {
@@ -232,24 +247,45 @@ internal static class NotesRuntime
         try
         {
             NotesLayout.Apply(ActiveBoard);
+            _layoutErrorLogged = false;
         }
-        catch
+        catch (Exception ex)
         {
-            // layout is best-effort; never block the UI
+            // layout is best-effort; never block the UI, but do not hide it either
+            if (!_layoutErrorLogged)
+            {
+                _layoutErrorLogged = true;
+                MegaCrit.Sts2.Core.Logging.Log.Error(
+                    "[Notes] layout failed (further errors suppressed): " + ex);
+            }
         }
         MarkDirty();
         FlushRunIfPossible();
         Changed?.Invoke();
     }
 
-    /// <summary>Operation log changed (captured or cleared); rebuild the
-    /// read-only current world line and persist quietly.</summary>
+    /// <summary>Operation log changed (captured or cleared). Capture callbacks
+    /// fire inside game code and can burst (a 5-card draw), so the board
+    /// rebuild + save are coalesced into the next Tick instead of running
+    /// once per op inside the callback.</summary>
     public static void OnOpsChanged()
     {
         MarkDirty();
+        _opsDirty = true;
+        OpsChanged?.Invoke();
+    }
+
+    /// <summary>Coalesced capture work: rebuild the read-only current line and
+    /// flush the run file at most once per frame.</summary>
+    private static void FlushOpsIfDirty()
+    {
+        if (!_opsDirty)
+        {
+            return;
+        }
+        _opsDirty = false;
         RefreshCurrentBoard();
         FlushRunIfPossible();
-        OpsChanged?.Invoke();
     }
 
     /// <summary>Run-scoped data is cheap to write (in-memory bag), so flush it
@@ -387,6 +423,16 @@ internal static class NotesRuntime
 
     public static void Tick(double delta)
     {
+        FlushOpsIfDirty();
+        if (!NotesOpLog.Initialized)
+        {
+            _opLogRetryTimer += (float)delta;
+            if (_opLogRetryTimer >= 2f)
+            {
+                _opLogRetryTimer = 0f;
+                NotesOpLog.Initialize();
+            }
+        }
         if (Library == NotesLibrary.Global && !_globalLoaded)
         {
             _retryTimer += (float)delta;
@@ -775,7 +821,7 @@ internal static class NotesRuntime
     {
         if (!RunActive)
         {
-            LastImportMessage = ModLocalization.T("import_empty", "没有可录入的操作");
+            LastImportMessage = ModLocalization.T("copy_no_run", "没有进行中的游戏，暂时无法复制世界线");
             Raise();
             return;
         }

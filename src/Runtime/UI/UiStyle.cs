@@ -129,13 +129,12 @@ internal static class UiStyle
         button.AddThemeStyleboxOverride("hover", ButtonStyle(hover, border));
         button.AddThemeStyleboxOverride("pressed", ButtonStyle(pressed, border));
         button.AddThemeStyleboxOverride("disabled", ButtonStyle(Color.FromHtml("1a1d24"), Color.FromHtml("2b303a")));
-        button.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        button.AddThemeStyleboxOverride("focus", ButtonStyle(new Color(0f, 0f, 0f, 0f), Accent));
         button.AddThemeColorOverride("font_color", TextMain);
         button.AddThemeColorOverride("font_hover_color", Colors.White);
         button.AddThemeColorOverride("font_pressed_color", Accent);
         button.AddThemeColorOverride("font_disabled_color", Color.FromHtml("5b6069"));
         button.AddThemeFontSizeOverride("font_size", fontSize);
-        button.FocusMode = Control.FocusModeEnum.None;
     }
 
     public static void StyleHandle(Panel panel, bool open)
@@ -150,10 +149,9 @@ internal static class UiStyle
         row.AddThemeStyleboxOverride("normal", ButtonStyle(Color.FromHtml("20242d"), Color.FromHtml("2c313c"), 6, 8, 3));
         row.AddThemeStyleboxOverride("hover", ButtonStyle(Color.FromHtml("2a303b"), Color.FromHtml("414958"), 6, 8, 3));
         row.AddThemeStyleboxOverride("pressed", ButtonStyle(Color.FromHtml("1a1e26"), Accent, 6, 8, 3));
-        row.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        row.AddThemeStyleboxOverride("focus", ButtonStyle(new Color(0f, 0f, 0f, 0f), Accent, 6, 8, 3));
         row.AddThemeColorOverride("font_color", TextMain);
         row.AddThemeColorOverride("font_hover_color", Colors.White);
-        row.FocusMode = Control.FocusModeEnum.None;
     }
 
     /// <summary>Dark theme for right-click menus.</summary>
@@ -175,13 +173,12 @@ internal static class UiStyle
         button.AddThemeStyleboxOverride("hover", ButtonStyle(ButtonHover, PanelBorder));
         button.AddThemeStyleboxOverride("pressed", ButtonStyle(ButtonPressed, PanelBorder));
         button.AddThemeStyleboxOverride("disabled", ButtonStyle(Color.FromHtml("1a1d24"), Color.FromHtml("2b303a")));
-        button.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        button.AddThemeStyleboxOverride("focus", ButtonStyle(new Color(0f, 0f, 0f, 0f), Accent));
         button.AddThemeColorOverride("font_color", TextMain);
         button.AddThemeColorOverride("font_hover_color", Colors.White);
         button.AddThemeColorOverride("font_pressed_color", Accent);
         button.AddThemeColorOverride("font_disabled_color", Color.FromHtml("5b6069"));
         button.AddThemeFontSizeOverride("font_size", fontSize);
-        button.FocusMode = Control.FocusModeEnum.None;
         StylePopup(button.GetPopup());
     }
 

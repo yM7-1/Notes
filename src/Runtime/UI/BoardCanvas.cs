@@ -175,7 +175,7 @@ public partial class BoardCanvas : Control
         _editor = new NoteEditDialog { Name = "NoteEditor" };
         AddChild(_editor);
 
-        NotesRuntime.Changed += OnRuntimeChanged;
+        NotesRuntime.Changed += () => OnRuntimeChanged(applyLayout: false);
         NotesRuntime.SelectionChanged += OnSelectionChanged;
         MouseExited += () =>
         {
@@ -185,12 +185,11 @@ public partial class BoardCanvas : Control
                 _surface.QueueRedraw();
             }
         };
-        OnRuntimeChanged();
+        OnRuntimeChanged(applyLayout: true);
     }
 
     public override void _ExitTree()
     {
-        NotesRuntime.Changed -= OnRuntimeChanged;
         NotesRuntime.SelectionChanged -= OnSelectionChanged;
     }
 
@@ -218,13 +217,15 @@ public partial class BoardCanvas : Control
         }
     }
 
-    private void OnRuntimeChanged()
+    private void OnRuntimeChanged(bool applyLayout)
     {
         var board = NotesRuntime.ActiveBoard;
         var sameBoard = ReferenceEquals(_board, board);
         _board = board;
-        if (_board != null)
+        if (_board != null && applyLayout)
         {
+            // NotesRuntime.Raise already applied the layout for model changes;
+            // only the initial attach needs it here.
             NotesLayout.Apply(_board);
         }
         if (_linkFrom != null && _board?.FindNode(_linkFrom) == null)
@@ -636,37 +637,8 @@ public partial class BoardCanvas : Control
 
     /// <summary>True when <paramref name="candidateId"/> is the anchor or inside
     /// its subtree (prevents slot drops that would create a cycle).</summary>
-    private bool IsInSubtree(string anchorId, string candidateId)
-    {
-        if (_board == null)
-        {
-            return false;
-        }
-        if (candidateId.Length == 0 || candidateId == anchorId)
-        {
-            return true;
-        }
-        var queue = new Queue<string>();
-        queue.Enqueue(anchorId);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        while (queue.Count > 0)
-        {
-            var current = queue.Dequeue();
-            if (!seen.Add(current))
-            {
-                continue;
-            }
-            foreach (var edge in _board.Edges.Where(e => e.From == current))
-            {
-                if (edge.To == candidateId)
-                {
-                    return true;
-                }
-                queue.Enqueue(edge.To);
-            }
-        }
-        return false;
-    }
+    private bool IsInSubtree(string anchorId, string candidateId) =>
+        _board != null && NotesGraph.IsInSubtree(_board, anchorId, candidateId);
 
     // ---- node drag (free move / slot placement / re-slot / detach) ------------
 
@@ -973,9 +945,7 @@ public partial class BoardCanvas : Control
         {
             return;
         }
-        var effective = before.NextSlotCount > 0
-            ? before.NextSlotCount
-            : (NotesLayout.IsRoot(_board, before) ? NotesLayout.RootParallelSlots : 1);
+        var effective = NotesLayout.EffectiveSlotCount(_board, before);
         var after = before.Clone();
         after.NextSlotCount = effective + 1;
         NotesRuntime.Commands.Execute(new UpdateNodeCommand(

@@ -360,7 +360,7 @@ public partial class CanvasSurface : Control
                 headerY = regions[0].Y - 34;
             }
             var label = ModLocalization.T("world_line_label", "世界线") + " " + (lineIndex + 1);
-            if (lineIndex == 0)
+            if (lineIndex == 0 && _board!.Kind == BoardKind.Current)
             {
                 label += " · " + ModLocalization.T("world_line_actual", "实际");
             }
