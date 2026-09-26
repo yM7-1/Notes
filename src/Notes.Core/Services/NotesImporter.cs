@@ -11,8 +11,10 @@ public sealed class NotesImportPlan
 
 /// <summary>
 /// Turns captured operations into structured nodes + chain edges for one turn
-/// region. Idempotent: ops already present (by <see cref="NotesNode.SourceOpId"/>)
-/// are skipped, and new nodes chain after the region's current tail.
+/// region. Default mode is idempotent: ops already present (by
+/// <see cref="NotesNode.SourceOpId"/>) are skipped, and new nodes chain after
+/// the region's current tail. With <c>replaceImported</c> the turn is rebuilt
+/// from scratch instead (the whole region is replaced — no appending).
 /// </summary>
 public static class NotesImporter
 {
@@ -39,7 +41,7 @@ public static class NotesImporter
             .ToList();
 
         var tail = replaceImported
-            ? FindManualTailId(board, region)
+            ? null // overwrite: rebuild the whole turn chain from scratch
             : FindTailId(board, region, turnOps, existingOpIds);
         foreach (var op in turnOps)
         {
@@ -84,9 +86,9 @@ public static class NotesImporter
     }
 
     /// <summary>Commands that materialize a turn import. With
-    /// <paramref name="replaceImported"/> the previously imported nodes of the
-    /// region are removed first, so "record this turn" overwrites instead of
-    /// appending; manually placed nodes survive.</summary>
+    /// <paramref name="replaceImported"/> the whole turn region is rebuilt from
+    /// the op log: every node of the region is removed first, so "record this
+    /// turn" overwrites instead of appending.</summary>
     public static List<INotesCommand> BuildCommands(
         NotesDocument document,
         NotesBoard board,
@@ -99,7 +101,6 @@ public static class NotesImporter
         if (replaceImported)
         {
             commands.AddRange(board.NodesOfRegion(region.Id)
-                .Where(n => n.SourceOpId.Length > 0)
                 .Select(n => (INotesCommand)new RemoveNodeCommand(document, board.Id, n.Id)));
         }
         commands.AddRange(plan.Nodes.Select(n => (INotesCommand)new AddNodeCommand(document, board.Id, n)));
@@ -176,25 +177,6 @@ public static class NotesImporter
             region.MaxHp = last.MaxHp;
         }
         return changed;
-    }
-
-    /// <summary>Tail among manually placed nodes only (used when imported nodes
-    /// are about to be replaced).</summary>
-    private static string? FindManualTailId(NotesBoard board, NotesTurnRegion region)
-    {
-        var manual = board.NodesOfRegion(region.Id)
-            .Where(n => n.SourceOpId.Length == 0)
-            .ToList();
-        if (manual.Count == 0)
-        {
-            return null;
-        }
-        var manualIds = manual.Select(n => n.Id).ToHashSet(StringComparer.Ordinal);
-        var hasChild = board.EdgesOfRegion(region.Id)
-            .Where(e => manualIds.Contains(e.From) && manualIds.Contains(e.To))
-            .Select(e => e.From)
-            .ToHashSet(StringComparer.Ordinal);
-        return manual.FirstOrDefault(n => !hasChild.Contains(n.Id))?.Id;
     }
 
     private static string? FindTailId(

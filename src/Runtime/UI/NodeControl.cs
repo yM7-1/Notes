@@ -203,6 +203,11 @@ public partial class NodeControl : Control
         }
     }
 
+    public override bool _CanDropData(Vector2 atPosition, Variant data) =>
+        !ReadOnly && _canvas.CanAcceptDrop(data);
+
+    public override void _DropData(Vector2 atPosition, Variant data) => _canvas.HandleDrop(data);
+
     public override void _GuiInput(InputEvent @event)
     {
         if (ReadOnly)

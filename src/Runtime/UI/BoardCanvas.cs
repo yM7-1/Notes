@@ -357,7 +357,13 @@ public partial class BoardCanvas : Control
 
     // ---- drag & drop ----------------------------------------------------------
 
-    public override bool _CanDropData(Vector2 atPosition, Variant data)
+    public override bool _CanDropData(Vector2 atPosition, Variant data) => CanAcceptDrop(data);
+
+    public override void _DropData(Vector2 atPosition, Variant data) => HandleDrop(data);
+
+    /// <summary>Shared drop acceptance (also forwarded by child node controls so
+    /// the slot hints stay visible while hovering a legend).</summary>
+    public bool CanAcceptDrop(Variant data)
     {
         if (_board?.IsReadOnly == true)
         {
@@ -377,7 +383,9 @@ public partial class BoardCanvas : Control
         return true;
     }
 
-    public override void _DropData(Vector2 atPosition, Variant data)
+    /// <summary>Shared drop handling; uses the current mouse position so drops
+    /// over child node controls land exactly like drops on empty canvas.</summary>
+    public void HandleDrop(Variant data)
     {
         _dragActive = false;
         QueueRedraw();
@@ -385,7 +393,8 @@ public partial class BoardCanvas : Control
         {
             return;
         }
-        if (TrashRect.HasPoint(atPosition))
+        var boardLocal = GetLocalMousePosition();
+        if (TrashRect.HasPoint(boardLocal))
         {
             return; // dropping a palette legend on the trash just cancels
         }
@@ -425,7 +434,7 @@ public partial class BoardCanvas : Control
             return;
         }
 
-        var surfaceLocal = (atPosition - _surface.Position) / _surface.Scale;
+        var surfaceLocal = (boardLocal - _surface.Position) / _surface.Scale;
 
         // Dropped inside a turn region but not on a slot: still belongs to that turn.
         if (TryGetRegionAt(surfaceLocal, out var regionId))
@@ -670,18 +679,38 @@ public partial class BoardCanvas : Control
         }
         else if (structured)
         {
-            // Dropped on empty canvas: detach from the chain, keep as free node
-            // at the position where it was dropped.
-            if (incoming != null)
+            // Dropped on empty canvas. If the drop is still inside a turn
+            // region, the node stays part of the structured board (otherwise
+            // it would silently become a free node and lose its next-step
+            // slots); only drops outside every region detach it.
+            if (TryGetRegionAt(_surface.GetLocalMousePosition(), out var stayRegionId))
             {
-                commands.Add(new RemoveEdgeCommand(document, _board.Id, incoming.Id));
+                if (node.RegionId != stayRegionId)
+                {
+                    if (incoming != null)
+                    {
+                        commands.Add(new RemoveEdgeCommand(document, _board.Id, incoming.Id));
+                    }
+                    var before = node.Clone();
+                    var after = node.Clone();
+                    after.RegionId = stayRegionId;
+                    commands.Add(new UpdateNodeCommand(document, _board.Id, nodeId, before, after));
+                }
             }
-            var before = node.Clone();
-            var after = node.Clone();
-            after.RegionId = "";
-            after.X = currentPosition.X;
-            after.Y = currentPosition.Y;
-            commands.Add(new UpdateNodeCommand(document, _board.Id, nodeId, before, after));
+            else
+            {
+                // Detach from the chain, keep as free node at the drop position.
+                if (incoming != null)
+                {
+                    commands.Add(new RemoveEdgeCommand(document, _board.Id, incoming.Id));
+                }
+                var before = node.Clone();
+                var after = node.Clone();
+                after.RegionId = "";
+                after.X = currentPosition.X;
+                after.Y = currentPosition.Y;
+                commands.Add(new UpdateNodeCommand(document, _board.Id, nodeId, before, after));
+            }
         }
         else
         {

@@ -291,7 +291,7 @@ public class StructuredModeTests
     }
 
     [Fact]
-    public void ImportCommands_ReplaceKeepsManualNodesAndOverwritesImported()
+    public void ImportCommands_ReplaceOverwritesTheWholeTurn()
     {
         var (doc, board, line) = NewStructured();
         var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
@@ -308,17 +308,17 @@ public class StructuredModeTests
         {
             command.Do();
         }
-        Assert.Equal(3, board.NodesOfRegion(region.Id).Count());
-        Assert.Contains(board.NodesOfRegion(region.Id), n => n.Id == "manual");
+        // Overwrite rebuilds the turn from the op log: manual nodes are gone too.
+        Assert.Equal(2, board.NodesOfRegion(region.Id).Count());
+        Assert.DoesNotContain(board.NodesOfRegion(region.Id), n => n.Id == "manual");
 
-        // Re-recording the turn replaces the imported chain instead of appending.
+        // Re-recording replaces the chain instead of appending duplicates.
         var second = NotesImporter.BuildCommands(doc, board, region, ops, replaceImported: true);
         foreach (var command in second)
         {
             command.Do();
         }
-        Assert.Equal(3, board.NodesOfRegion(region.Id).Count());
-        Assert.Contains(board.NodesOfRegion(region.Id), n => n.Id == "manual");
+        Assert.Equal(2, board.NodesOfRegion(region.Id).Count());
         Assert.Equal(2, board.NodesOfRegion(region.Id).Count(n => n.SourceOpId.Length > 0));
     }
 
