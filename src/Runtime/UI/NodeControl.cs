@@ -93,6 +93,23 @@ public partial class NodeControl : Control
 
     private bool IsInPort(Vector2 localPosition) => localPosition.DistanceTo(PortOffset) <= 13f;
 
+    private static Color AnnotationColor(string refId)
+    {
+        if (refId.StartsWith("relic:", StringComparison.Ordinal))
+        {
+            return UiStyle.KindColor(NodeKind.Relic, -1);
+        }
+        if (refId.StartsWith("exhaust:", StringComparison.Ordinal))
+        {
+            return UiStyle.KindColor(NodeKind.Exhaust, -1);
+        }
+        if (refId.StartsWith("card:", StringComparison.Ordinal))
+        {
+            return UiStyle.KindColor(NodeKind.Draw, -1);
+        }
+        return UiStyle.PanelBorder;
+    }
+
     public override void _Draw()
     {
         var font = ThemeDB.FallbackFont;
@@ -187,12 +204,12 @@ public partial class NodeControl : Control
             var text = UiStyle.Ellipsize(annotation.Text, font, 10, 176f);
             var textSize = font.GetStringSize(text, HorizontalAlignment.Left, -1, 10);
             var chip = new Rect2(6, chipY, textSize.X + 12, 16);
-            var isRelic = annotation.RefId.StartsWith("relic:", StringComparison.Ordinal);
+            var accent = AnnotationColor(annotation.RefId);
             _chip.BgColor = UiStyle.BadgeBg;
-            _chip.BorderColor = isRelic ? UiStyle.KindColor(NodeKind.Relic, -1) : UiStyle.PanelBorder;
+            _chip.BorderColor = accent;
             DrawStyleBox(_chip, chip);
             DrawString(font, chip.Position + new Vector2(6, 12), text,
-                HorizontalAlignment.Left, -1, 10, isRelic ? UiStyle.KindColor(NodeKind.Relic, -1) : UiStyle.TextDim);
+                HorizontalAlignment.Left, -1, 10, accent);
             chipY += 18f;
         }
 

@@ -116,6 +116,22 @@ public class StructuredModeTests
     }
 
     [Fact]
+    public void Importer_MapsExhaustOpsToExhaustNodes()
+    {
+        Assert.Equal(NodeKind.Exhaust, NotesImporter.MapKind(NotesOpKind.Exhaust));
+
+        var (doc, board, line) = NewStructured();
+        var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
+        var ops = new List<NotesOpData>
+        {
+            new() { Id = "op1", Kind = NotesOpKind.Exhaust, Turn = 1, UnixMs = 1, Title = "消耗×2" },
+        };
+        var plan = NotesImporter.Plan(board, region, ops);
+        var node = Assert.Single(plan.Nodes);
+        Assert.Equal(NodeKind.Exhaust, node.Kind);
+    }
+
+    [Fact]
     public void Json_MigratesV1DocumentToStructured()
     {
         const string v1 = """

@@ -61,6 +61,7 @@ internal static class UiStyle
         NodeKind.Draw => Color.FromHtml("4fb3c9"),
         NodeKind.Discard => Color.FromHtml("8a8f98"),
         NodeKind.EndTurn => Color.FromHtml("5b6069"),
+        NodeKind.Exhaust => Color.FromHtml("c07a4a"),
         _ => Accent,
     };
 
@@ -71,6 +72,7 @@ internal static class UiStyle
         NodeKind.Potion => "药",
         NodeKind.Relic => "遗",
         NodeKind.EndTurn => "终",
+        NodeKind.Exhaust => "耗",
         _ => "",
     };
 

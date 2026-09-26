@@ -31,8 +31,10 @@ internal static class NotesOpLog
     private static long _causeAtMs;
     private static NotesOpData? _drawBatch;
     private static NotesOpData? _discardBatch;
+    private static NotesOpData? _exhaustBatch;
     private static int _drawCount;
     private static int _discardCount;
+    private static int _exhaustCount;
     private static int _turn;
     private static int _diagnostics;
     private static bool _initialized;
@@ -81,8 +83,10 @@ internal static class NotesOpLog
             Ops.Clear();
             _drawBatch = null;
             _discardBatch = null;
+            _exhaustBatch = null;
             _drawCount = 0;
             _discardCount = 0;
+            _exhaustCount = 0;
             _causeId = null;
         }
     }
@@ -208,6 +212,10 @@ internal static class NotesOpLog
             {
                 HandleDiscard(card);
             }
+            else if (pileType == PileType.Exhaust)
+            {
+                HandleExhaust(card);
+            }
         }
         catch (Exception ex)
         {
@@ -289,6 +297,10 @@ internal static class NotesOpLog
     private static void HandleDiscard(CardModel card)
     {
         var name = CardCatalog.TitleOf(card);
+        if (IsCauseSelfMove(card.Id.ToString()))
+        {
+            return; // the played card itself moving to the discard pile
+        }
         if (TryAnnotateCause(Format("annot_discard", "弃掉 {0}", name), "card:" + card.Id))
         {
             return;
@@ -307,14 +319,42 @@ internal static class NotesOpLog
         }
     }
 
+    private static void HandleExhaust(CardModel card)
+    {
+        var name = CardCatalog.TitleOf(card);
+        if (IsCauseSelfMove(card.Id.ToString()))
+        {
+            return; // the played card itself exhausting after play
+        }
+        // Exhaust effects often hit several cards: merge them into one annotation.
+        if (TryMergeCauseAnnotation("exhaust:", name, "annot_exhaust", "消耗 {0}"))
+        {
+            return;
+        }
+        lock (Gate)
+        {
+            if (_exhaustBatch == null)
+            {
+                _exhaustBatch = NewOp(NotesOpKind.Exhaust, ModLocalization.T("op_exhaust", "消耗"));
+                Ops.Add(_exhaustBatch);
+            }
+            _exhaustCount++;
+            _exhaustBatch.Meta = string.IsNullOrEmpty(_exhaustBatch.Meta) ? name : _exhaustBatch.Meta + ", " + name;
+            _exhaustBatch.Title = ModLocalization.T("op_exhaust", "消耗") + "×" + _exhaustCount;
+            NotesRuntime.OnOpsChanged();
+        }
+    }
+
     private static void EndBatches()
     {
         lock (Gate)
         {
             _drawBatch = null;
             _discardBatch = null;
+            _exhaustBatch = null;
             _drawCount = 0;
             _discardCount = 0;
+            _exhaustCount = 0;
         }
     }
 
@@ -440,6 +480,53 @@ internal static class NotesOpLog
         }
         NotesRuntime.OnOpsChanged();
         return true;
+    }
+
+    /// <summary>Merges e.g. "exhaust: A" and "exhaust: B" into one "消耗 A、B" chip.</summary>
+    private static bool TryMergeCauseAnnotation(string refId, string name, string labelKey, string fallback)
+    {
+        if (_causeId == null || Environment.TickCount64 - _causeAtMs > CauseWindowMs)
+        {
+            return false;
+        }
+        lock (Gate)
+        {
+            var cause = Ops.FirstOrDefault(o => o.Id == _causeId);
+            if (cause == null)
+            {
+                return false;
+            }
+            var existing = cause.Annotations.FirstOrDefault(a => a.RefId == refId);
+            if (existing == null)
+            {
+                cause.Annotations.Add(new NotesAnnotation
+                {
+                    RefId = refId,
+                    Text = Format(labelKey, fallback, name),
+                });
+            }
+            else if (!existing.Text.Contains(name, StringComparison.Ordinal))
+            {
+                existing.Text += "、" + name;
+            }
+        }
+        NotesRuntime.OnOpsChanged();
+        return true;
+    }
+
+    /// <summary>True when the moving card is the very card that was just played
+    /// (its own move to discard/exhaust must not become an annotation).</summary>
+    private static bool IsCauseSelfMove(string cardModelId)
+    {
+        if (_causeId == null || Environment.TickCount64 - _causeAtMs > CauseWindowMs)
+        {
+            return false;
+        }
+        lock (Gate)
+        {
+            var cause = Ops.FirstOrDefault(o => o.Id == _causeId);
+            return cause != null && cause.Kind == NotesOpKind.Card && cause.RefId == cardModelId;
+        }
     }
 
     private static void LogDiagnostic(string message)

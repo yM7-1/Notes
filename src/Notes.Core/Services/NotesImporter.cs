@@ -108,6 +108,7 @@ public static class NotesImporter
         NotesOpKind.Draw => NodeKind.Draw,
         NotesOpKind.Discard => NodeKind.Discard,
         NotesOpKind.EndTurn => NodeKind.EndTurn,
+        NotesOpKind.Exhaust => NodeKind.Exhaust,
         _ => NodeKind.Text,
     };
 }

@@ -10,6 +10,7 @@ public enum NotesOpKind
     Discard = 4,
     EndTurn = 5,
     TurnEvent = 6,
+    Exhaust = 7,
 }
 
 /// <summary>One captured combat operation, persisted with the run so notes can

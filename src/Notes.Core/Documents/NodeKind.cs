@@ -10,4 +10,5 @@ public enum NodeKind
     Potion = 4,
     Relic = 5,
     EndTurn = 6,
+    Exhaust = 7,
 }
