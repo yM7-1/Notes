@@ -52,7 +52,49 @@ public static class NotesJson
             board.Name = board.Name?.Trim() ?? "";
             board.Nodes ??= new List<NotesNode>();
             board.Edges ??= new List<NotesEdge>();
+            board.WorldLines ??= new List<NotesWorldLine>();
+            board.TurnRegions ??= new List<NotesTurnRegion>();
             board.Zoom = Math.Clamp(board.Zoom <= 0f ? 1f : board.Zoom, 0.5f, 2f);
+
+            var seenLines = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var line in board.WorldLines)
+            {
+                line.Id = string.IsNullOrWhiteSpace(line.Id) ? IdFactory.NewWorldLineId() : line.Id;
+                while (!seenLines.Add(line.Id))
+                {
+                    line.Id = IdFactory.NewWorldLineId();
+                }
+                line.Name = string.IsNullOrWhiteSpace(line.Name) ? "World" : line.Name.Trim();
+            }
+
+            var seenRegions = new HashSet<string>(StringComparer.Ordinal);
+            board.TurnRegions.RemoveAll(region =>
+            {
+                region.Id = string.IsNullOrWhiteSpace(region.Id) ? IdFactory.NewRegionId() : region.Id;
+                if (!seenRegions.Add(region.Id))
+                {
+                    region.Id = IdFactory.NewRegionId();
+                    seenRegions.Add(region.Id);
+                }
+                region.TurnEvents ??= new List<NotesAnnotation>();
+                if (region.TurnNumber < 1)
+                {
+                    region.TurnNumber = 1;
+                }
+                if (board.FindWorldLine(region.WorldLineId) == null)
+                {
+                    if (board.WorldLines.Count == 0)
+                    {
+                        board.WorldLines.Add(new NotesWorldLine
+                        {
+                            Id = IdFactory.NewWorldLineId(),
+                            Name = "Actual",
+                        });
+                    }
+                    region.WorldLineId = board.WorldLines[0].Id;
+                }
+                return false;
+            });
 
             var seenNodes = new HashSet<string>(StringComparer.Ordinal);
             foreach (var node in board.Nodes)
@@ -66,6 +108,14 @@ public static class NotesJson
                 node.Note ??= "";
                 node.RefId ??= "";
                 node.ColorHex ??= "";
+                node.RegionId ??= "";
+                node.SourceOpId ??= "";
+                node.Meta ??= "";
+                node.Annotations ??= new List<NotesAnnotation>();
+                if (node.RegionId.Length > 0 && board.FindRegion(node.RegionId) == null)
+                {
+                    node.RegionId = "";
+                }
             }
 
             var seenEdges = new HashSet<string>(StringComparer.Ordinal);

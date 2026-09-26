@@ -9,6 +9,12 @@ public static class IdFactory
 
     public static string NewEdgeId() => New("e");
 
+    public static string NewWorldLineId() => New("w");
+
+    public static string NewRegionId() => New("r");
+
+    public static string NewOpId() => New("op");
+
     private static string New(string prefix) =>
         prefix + Guid.NewGuid().ToString("N")[..10];
 }

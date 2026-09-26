@@ -42,6 +42,25 @@ public static class Entry
 
         try
         {
+            Notes.Game.NotesOpLog.Initialize();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] op log init failed: " + ex);
+        }
+
+        try
+        {
+            var harmony = new HarmonyLib.Harmony("Notes");
+            harmony.PatchAll(typeof(Entry).Assembly);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] harmony patches failed: " + ex);
+        }
+
+        try
+        {
             AttachLayer();
         }
         catch (Exception ex)

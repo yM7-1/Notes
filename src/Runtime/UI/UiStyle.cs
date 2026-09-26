@@ -53,6 +53,27 @@ internal static class UiStyle
         _ => Color.FromHtml("6f7784"),
     };
 
+    public static Color KindColor(NodeKind kind, int cardType) => kind switch
+    {
+        NodeKind.Card => TypeColor(cardType),
+        NodeKind.Potion => Color.FromHtml("b06ad6"),
+        NodeKind.Relic => Color.FromHtml("d9a13b"),
+        NodeKind.Draw => Color.FromHtml("4fb3c9"),
+        NodeKind.Discard => Color.FromHtml("8a8f98"),
+        NodeKind.EndTurn => Color.FromHtml("5b6069"),
+        _ => Accent,
+    };
+
+    public static string KindGlyph(NodeKind kind) => kind switch
+    {
+        NodeKind.Draw => "抽",
+        NodeKind.Discard => "弃",
+        NodeKind.Potion => "药",
+        NodeKind.Relic => "遗",
+        NodeKind.EndTurn => "终",
+        _ => "",
+    };
+
     public static StyleBoxFlat Box(Color background, Color border, int radius = 6, int borderWidth = 1)
     {
         var style = new StyleBoxFlat { BgColor = background, BorderColor = border };

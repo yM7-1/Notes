@@ -237,8 +237,7 @@ public sealed class UpdateEdgeCommand : INotesCommand
 }
 
 public sealed class AddBoardCommand : INotesCommand
-{
-    private readonly NotesDocument _doc;
+{    private readonly NotesDocument _doc;
     private readonly NotesBoard _board;
     private string _previousActive = "";
 
@@ -296,5 +295,223 @@ public sealed class RemoveBoardCommand : INotesCommand
         }
         _doc.InsertBoard(_index, _board);
         _doc.ActiveBoardId = _previousActive;
+    }
+}
+
+/// <summary>Runs several commands as one undo step (auto-import batches).</summary>
+public sealed class CompositeCommand : INotesCommand
+{
+    private readonly List<INotesCommand> _commands;
+
+    public CompositeCommand(IEnumerable<INotesCommand> commands, string name = "Composite")
+    {
+        _commands = commands.ToList();
+        Name = name;
+    }
+
+    public string Name { get; }
+
+    public void Do()
+    {
+        foreach (var command in _commands)
+        {
+            command.Do();
+        }
+    }
+
+    public void Undo()
+    {
+        for (var i = _commands.Count - 1; i >= 0; i--)
+        {
+            _commands[i].Undo();
+        }
+    }
+}
+
+public sealed class AddWorldLineCommand : INotesCommand
+{
+    private readonly NotesDocument _doc;
+    private readonly string _boardId;
+    private readonly string? _name;
+    private NotesWorldLine? _line;
+
+    public AddWorldLineCommand(NotesDocument doc, string boardId, string? name = null)
+    {
+        _doc = doc;
+        _boardId = boardId;
+        _name = name;
+    }
+
+    public string Name => "AddWorldLine";
+
+    public void Do() => _line = _doc.AddWorldLine(_boardId, _name);
+
+    public void Undo()
+    {
+        if (_line != null)
+        {
+            _doc.RemoveWorldLine(_boardId, _line.Id);
+        }
+    }
+}
+
+public sealed class RemoveWorldLineCommand : INotesCommand
+{
+    private readonly NotesDocument _doc;
+    private readonly string _boardId;
+    private readonly string _worldLineId;
+    private NotesWorldLine? _line;
+    private int _index;
+    private readonly List<NotesTurnRegion> _regions = new();
+    private readonly List<NotesNode> _nodes = new();
+    private readonly List<NotesEdge> _edges = new();
+
+    public RemoveWorldLineCommand(NotesDocument doc, string boardId, string worldLineId)
+    {
+        _doc = doc;
+        _boardId = boardId;
+        _worldLineId = worldLineId;
+    }
+
+    public string Name => "RemoveWorldLine";
+
+    public void Do()
+    {
+        var board = _doc.FindBoard(_boardId);
+        _line = board?.FindWorldLine(_worldLineId);
+        if (board == null || _line == null)
+        {
+            return;
+        }
+        _index = board.WorldLines.IndexOf(_line);
+        _regions.Clear();
+        _nodes.Clear();
+        _edges.Clear();
+        foreach (var region in board.RegionsOf(_worldLineId))
+        {
+            _regions.Add(region.Clone());
+            foreach (var node in board.NodesOfRegion(region.Id))
+            {
+                _nodes.Add(node.Clone());
+                foreach (var edge in board.EdgesOf(node.Id).Where(e => e.To == node.Id || e.From == node.Id))
+                {
+                    if (!_edges.Any(x => x.Id == edge.Id))
+                    {
+                        _edges.Add(edge.Clone());
+                    }
+                }
+            }
+        }
+        _doc.RemoveWorldLine(_boardId, _worldLineId);
+    }
+
+    public void Undo()
+    {
+        if (_line == null)
+        {
+            return;
+        }
+        _doc.InsertWorldLine(_boardId, _index, _line);
+        foreach (var region in _regions)
+        {
+            _doc.InsertTurnRegion(_boardId, _doc.FindBoard(_boardId)!.TurnRegions.Count, region);
+        }
+        foreach (var node in _nodes)
+        {
+            _doc.AddNode(_boardId, node);
+        }
+        foreach (var edge in _edges)
+        {
+            _doc.AddEdge(_boardId, edge);
+        }
+    }
+}
+
+public sealed class AddTurnRegionCommand : INotesCommand
+{
+    private readonly NotesDocument _doc;
+    private readonly string _boardId;
+    private readonly string _worldLineId;
+    private readonly int _turnNumber;
+    private NotesTurnRegion? _region;
+
+    public AddTurnRegionCommand(NotesDocument doc, string boardId, string worldLineId, int turnNumber)
+    {
+        _doc = doc;
+        _boardId = boardId;
+        _worldLineId = worldLineId;
+        _turnNumber = turnNumber;
+    }
+
+    public string Name => "AddTurnRegion";
+
+    public void Do() => _region = _doc.EnsureTurnRegion(_boardId, _worldLineId, _turnNumber);
+
+    public void Undo()
+    {
+        if (_region != null)
+        {
+            _doc.RemoveTurnRegion(_boardId, _region.Id);
+        }
+    }
+}
+
+public sealed class RemoveTurnRegionCommand : INotesCommand
+{
+    private readonly NotesDocument _doc;
+    private readonly string _boardId;
+    private readonly string _regionId;
+    private NotesTurnRegion? _region;
+    private int _index;
+    private readonly List<NotesNode> _nodes = new();
+    private readonly List<NotesEdge> _edges = new();
+
+    public RemoveTurnRegionCommand(NotesDocument doc, string boardId, string regionId)
+    {
+        _doc = doc;
+        _boardId = boardId;
+        _regionId = regionId;
+    }
+
+    public string Name => "RemoveTurnRegion";
+
+    public void Do()
+    {
+        var board = _doc.FindBoard(_boardId);
+        _region = board?.FindRegion(_regionId);
+        if (board == null || _region == null)
+        {
+            return;
+        }
+        _index = board.TurnRegions.IndexOf(_region);
+        _nodes.Clear();
+        _edges.Clear();
+        var nodeIds = board.NodesOfRegion(_regionId).Select(n => n.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var node in board.NodesOfRegion(_regionId))
+        {
+            _nodes.Add(node.Clone());
+        }
+        foreach (var edge in board.Edges.Where(e => nodeIds.Contains(e.From) || nodeIds.Contains(e.To)))
+        {
+            _edges.Add(edge.Clone());
+        }
+        _doc.RemoveTurnRegion(_boardId, _regionId);
+    }
+
+    public void Undo()
+    {
+        if (_region == null)
+        {
+            return;
+        }
+        _doc.InsertTurnRegion(_boardId, _index, _region);
+        foreach (var node in _nodes)
+        {
+            _doc.AddNode(_boardId, node);
+        }
+        foreach (var edge in _edges)
+        {
+            _doc.AddEdge(_boardId, edge);
+        }
     }
 }

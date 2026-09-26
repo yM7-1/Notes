@@ -50,7 +50,11 @@ public partial class NotesWindow : PanelContainer
 
         header.AddChild(MakeButton(ModLocalization.T("board_new", "+ Board"), () => NotesRuntime.NewBoard()));
         header.AddChild(MakeButton(ModLocalization.T("board_delete", "Del Board"), ShowDeleteBoard));
+        header.AddChild(MakeButton(ModLocalization.T("world_line_new", "+ World line"), () => NotesRuntime.NewWorldLine()));
         header.AddChild(MakeButton(ModLocalization.T("add_text", "+ Text"), AddTextHere));
+        header.AddChild(MakeButton(ModLocalization.T("import_turn", "Record turn"), () => NotesRuntime.Import(currentTurnOnly: true)));
+        header.AddChild(MakeButton(ModLocalization.T("import_all", "Record combat"), () => NotesRuntime.Import(currentTurnOnly: false)));
+        header.AddChild(MakeButton(ModLocalization.T("ops_clear", "Clear log"), () => NotesRuntime.ClearOps()));
 
         _linkButton = new Button
         {
@@ -116,12 +120,14 @@ public partial class NotesWindow : PanelContainer
         AddChild(_deleteConfirm);
 
         NotesRuntime.Changed += RefreshHeader;
+        NotesRuntime.OpsChanged += RefreshHeader;
         RefreshHeader();
     }
 
     public override void _ExitTree()
     {
         NotesRuntime.Changed -= RefreshHeader;
+        NotesRuntime.OpsChanged -= RefreshHeader;
     }
 
     public void OnShown()
@@ -213,7 +219,9 @@ public partial class NotesWindow : PanelContainer
             {
                 hint = ModLocalization.T("status_hint", "");
             }
-            _status.Text = combat + "  ·  " + hint;
+            _status.Text = combat
+                + "  ·  " + ModLocalization.T("status_ops", "Ops") + " " + NotesRuntime.OpsCount
+                + "  ·  " + hint;
         }
         finally
         {

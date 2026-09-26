@@ -3,7 +3,9 @@ using Notes.Core.Documents;
 
 namespace Notes.UI;
 
-/// <summary>A draggable legend on the board: mini card or text note.</summary>
+/// <summary>A draggable legend on the board: card, action (draw/discard/potion/
+/// relic/end turn) or text note. Structured nodes (inside a turn region) are
+/// positioned by the layout engine and can be re-slotted by dragging.</summary>
 public partial class NodeControl : Control
 {
     public const float NodeWidth = 184f;
@@ -15,6 +17,7 @@ public partial class NodeControl : Control
     private StyleBoxFlat _box = null!;
     private StyleBoxFlat _bar = null!;
     private StyleBoxFlat _badge = null!;
+    private StyleBoxFlat _chip = null!;
     private bool _hover;
     private bool _hoverPort;
     private bool _dragging;
@@ -42,6 +45,9 @@ public partial class NodeControl : Control
         _badge = new StyleBoxFlat();
         _badge.SetCornerRadiusAll(5);
         _badge.SetBorderWidthAll(1);
+        _chip = new StyleBoxFlat();
+        _chip.SetCornerRadiusAll(4);
+        _chip.SetBorderWidthAll(1);
 
         MouseEntered += () =>
         {
@@ -69,13 +75,17 @@ public partial class NodeControl : Control
     private void UpdateTooltip()
     {
         var text = _node.Title + (_node.Upgraded ? "+" : "");
+        if (!string.IsNullOrWhiteSpace(_node.Meta))
+        {
+            text += "\n" + _node.Meta;
+        }
+        if (_node.Annotations.Count > 0)
+        {
+            text += "\n" + string.Join("\n", _node.Annotations.Select(a => "• " + a.Text));
+        }
         if (!string.IsNullOrWhiteSpace(_node.Note))
         {
             text += "\n" + _node.Note;
-        }
-        if (_node.Kind == NodeKind.Card && !string.IsNullOrWhiteSpace(_node.RefId))
-        {
-            text += "\n" + _node.RefId;
         }
         TooltipText = text;
     }
@@ -85,13 +95,13 @@ public partial class NodeControl : Control
     public override void _Draw()
     {
         var font = ThemeDB.FallbackFont;
-        var typeColor = _node.Kind == NodeKind.Card ? UiStyle.TypeColor(_node.CardType) : UiStyle.Accent;
+        var kindColor = UiStyle.KindColor(_node.Kind, _node.CardType);
         var stateColor = UiStyle.StateColor(_node.State);
 
         var border = _dragging || _hover
             ? UiStyle.Accent
             : _node.State == NodeState.None
-                ? UiStyle.PanelBorder.Lerp(typeColor, 0.4f)
+                ? UiStyle.PanelBorder.Lerp(kindColor, 0.4f)
                 : stateColor;
         var background = _node.Kind == NodeKind.Text ? UiStyle.NodeBgText : UiStyle.NodeBg;
         if (_hover || _dragging)
@@ -105,10 +115,11 @@ public partial class NodeControl : Control
         _box.SetCornerRadiusAll(9);
         DrawStyleBox(_box, new Rect2(Vector2.Zero, Size));
 
-        _bar.BgColor = typeColor;
+        _bar.BgColor = kindColor;
         DrawStyleBox(_bar, new Rect2(8, 10, 4, Size.Y - 20));
 
         var textX = 18f;
+        var glyph = UiStyle.KindGlyph(_node.Kind);
         if (_node.Kind == NodeKind.Card)
         {
             textX = 48f;
@@ -119,6 +130,16 @@ public partial class NodeControl : Control
             var costSize = font.GetStringSize(costText, HorizontalAlignment.Left, -1, 13);
             DrawString(font, costCenter + new Vector2(-costSize.X / 2f, costSize.Y / 2f - 3f), costText,
                 HorizontalAlignment.Left, -1, 13, UiStyle.TextMain);
+        }
+        else if (glyph.Length > 0)
+        {
+            textX = 48f;
+            var badgeCenter = new Vector2(30, Size.Y / 2f);
+            DrawCircle(badgeCenter, 12.5f, UiStyle.BadgeBg);
+            DrawCircle(badgeCenter, 12.5f, kindColor, false, 1.6f);
+            var glyphSize = font.GetStringSize(glyph, HorizontalAlignment.Left, -1, 13);
+            DrawString(font, badgeCenter + new Vector2(-glyphSize.X / 2f, glyphSize.Y / 2f - 3f), glyph,
+                HorizontalAlignment.Left, -1, 13, kindColor);
         }
 
         var hasNote = !string.IsNullOrWhiteSpace(_node.Note);
@@ -134,7 +155,7 @@ public partial class NodeControl : Control
 
         if (_node.State != NodeState.None)
         {
-            var glyph = _node.State switch
+            var stateGlyph = _node.State switch
             {
                 NodeState.Tried => "✔",
                 NodeState.Speculated => "?",
@@ -145,13 +166,29 @@ public partial class NodeControl : Control
             _badge.BgColor = UiStyle.BadgeBg;
             _badge.BorderColor = stateColor;
             DrawStyleBox(_badge, badge);
-            var glyphSize = font.GetStringSize(glyph, HorizontalAlignment.Left, -1, 11);
+            var glyphSize = font.GetStringSize(stateGlyph, HorizontalAlignment.Left, -1, 11);
             DrawString(font, badge.Position + new Vector2((badge.Size.X - glyphSize.X) / 2f, badge.Size.Y - 4f),
-                glyph, HorizontalAlignment.Left, -1, 11, stateColor);
+                stateGlyph, HorizontalAlignment.Left, -1, 11, stateColor);
+        }
+
+        // Auto-captured annotations as chips under the node.
+        var chipY = Size.Y + 4f;
+        foreach (var annotation in _node.Annotations.Take(3))
+        {
+            var text = UiStyle.Ellipsize(annotation.Text, font, 10, 176f);
+            var textSize = font.GetStringSize(text, HorizontalAlignment.Left, -1, 10);
+            var chip = new Rect2(6, chipY, textSize.X + 12, 16);
+            var isRelic = annotation.RefId.StartsWith("relic:", StringComparison.Ordinal);
+            _chip.BgColor = UiStyle.BadgeBg;
+            _chip.BorderColor = isRelic ? UiStyle.KindColor(NodeKind.Relic, -1) : UiStyle.PanelBorder;
+            DrawStyleBox(_chip, chip);
+            DrawString(font, chip.Position + new Vector2(6, 12), text,
+                HorizontalAlignment.Left, -1, 10, isRelic ? UiStyle.KindColor(NodeKind.Relic, -1) : UiStyle.TextDim);
+            chipY += 18f;
         }
 
         DrawCircle(PortOffset, _hoverPort ? 8f : 6f, UiStyle.BadgeBg);
-        DrawCircle(PortOffset, _hoverPort ? 6.5f : 5f, _hoverPort ? UiStyle.Accent : typeColor);
+        DrawCircle(PortOffset, _hoverPort ? 6.5f : 5f, _hoverPort ? UiStyle.Accent : kindColor);
     }
 
     public override void _GuiInput(InputEvent @event)
@@ -182,6 +219,10 @@ public partial class NodeControl : Control
                 _moved = false;
                 _grabOffset = GetGlobalMousePosition() - GlobalPosition;
                 _startNodePosition = new Vector2(_node.X, _node.Y);
+                if (_node.RegionId.Length > 0)
+                {
+                    _canvas.BeginStructuredDrag(_node.Id);
+                }
                 MoveToFront();
                 QueueRedraw();
                 AcceptEvent();
@@ -198,7 +239,11 @@ public partial class NodeControl : Control
                 {
                     _dragging = false;
                     QueueRedraw();
-                    if (_moved)
+                    if (_node.RegionId.Length > 0)
+                    {
+                        _canvas.EndStructuredDrag(_node.Id, Position);
+                    }
+                    else if (_moved)
                     {
                         _canvas.CommitNodeMove(_node.Id, _startNodePosition, Position);
                     }
@@ -223,8 +268,11 @@ public partial class NodeControl : Control
                 if (_moved)
                 {
                     GlobalPosition = target;
-                    _node.X = Position.X;
-                    _node.Y = Position.Y;
+                    if (_node.RegionId.Length == 0)
+                    {
+                        _node.X = Position.X;
+                        _node.Y = Position.Y;
+                    }
                     _canvas.OnNodeMoved();
                 }
                 AcceptEvent();

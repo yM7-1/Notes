@@ -57,13 +57,15 @@ internal static class NotesPersistence
         }
     }
 
-    public static NotesDocument LoadRun(RunState state)
+    public static NotesDocument LoadRun(RunState state, out List<NotesOpData> ops)
     {
+        ops = new List<NotesOpData>();
         try
         {
-            if (_runSlot != null && _runSlot.TryGet(state, out var data) && data?.Document != null)
+            if (_runSlot != null && _runSlot.TryGet(state, out var data) && data != null)
             {
-                return data.Document;
+                ops = data.Ops ?? new List<NotesOpData>();
+                return data.Document ?? new NotesDocument();
             }
         }
         catch (Exception ex)
@@ -73,11 +75,15 @@ internal static class NotesPersistence
         return new NotesDocument();
     }
 
-    public static void SaveRun(RunState state, NotesDocument document)
+    public static void SaveRun(RunState state, NotesDocument document, IReadOnlyList<NotesOpData> ops)
     {
         try
         {
-            _runSlot?.Modify(state, data => data.Document = document);
+            _runSlot?.Modify(state, data =>
+            {
+                data.Document = document;
+                data.Ops = ops.ToList();
+            });
         }
         catch (Exception ex)
         {

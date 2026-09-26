@@ -9,7 +9,7 @@ namespace Notes.Core.Documents;
 /// </summary>
 public sealed class NotesDocument
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     public int Version { get; set; } = CurrentVersion;
 
@@ -142,6 +142,126 @@ public sealed class NotesDocument
             return false;
         }
         Boards.Insert(Math.Clamp(index, 0, Boards.Count), board);
+        return true;
+    }
+
+    // ---- structured mode (world lines / turn regions) ------------------------
+
+    /// <summary>First world line = the actual line; created on demand.</summary>
+    public NotesWorldLine EnsureActualWorldLine(string boardId)
+    {
+        var board = FindBoard(boardId) ?? throw new InvalidOperationException("board not found");
+        var existing = board.WorldLines.FirstOrDefault();
+        if (existing != null)
+        {
+            return existing;
+        }
+        var line = new NotesWorldLine
+        {
+            Id = IdFactory.NewWorldLineId(),
+            Name = "Actual",
+            CreatedAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        };
+        board.WorldLines.Add(line);
+        return line;
+    }
+
+    public NotesWorldLine AddWorldLine(string boardId, string? name = null)
+    {
+        var board = FindBoard(boardId) ?? throw new InvalidOperationException("board not found");
+        var line = new NotesWorldLine
+        {
+            Id = IdFactory.NewWorldLineId(),
+            Name = string.IsNullOrWhiteSpace(name) ? $"World {board.WorldLines.Count + 1}" : name.Trim(),
+            CreatedAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        };
+        board.WorldLines.Add(line);
+        return line;
+    }
+
+    public bool InsertWorldLine(string boardId, int index, NotesWorldLine line)
+    {
+        var board = FindBoard(boardId);
+        if (board == null || board.FindWorldLine(line.Id) != null)
+        {
+            return false;
+        }
+        board.WorldLines.Insert(Math.Clamp(index, 0, board.WorldLines.Count), line);
+        return true;
+    }
+
+    /// <summary>Removes a world line with its regions, structured nodes and edges.</summary>
+    public bool RemoveWorldLine(string boardId, string worldLineId)
+    {
+        var board = FindBoard(boardId);
+        var line = board?.FindWorldLine(worldLineId);
+        if (board == null || line == null)
+        {
+            return false;
+        }
+        foreach (var region in board.RegionsOf(worldLineId).ToList())
+        {
+            RemoveTurnRegion(boardId, region.Id);
+        }
+        board.WorldLines.Remove(line);
+        return true;
+    }
+
+    public NotesTurnRegion EnsureTurnRegion(string boardId, string worldLineId, int turnNumber)
+    {
+        var board = FindBoard(boardId) ?? throw new InvalidOperationException("board not found");
+        var existing = board.TurnRegions.FirstOrDefault(r =>
+            r.WorldLineId == worldLineId && r.TurnNumber == turnNumber);
+        if (existing != null)
+        {
+            return existing;
+        }
+        var region = new NotesTurnRegion
+        {
+            Id = IdFactory.NewRegionId(),
+            WorldLineId = worldLineId,
+            TurnNumber = turnNumber,
+        };
+        board.TurnRegions.Add(region);
+        return region;
+    }
+
+    public bool InsertTurnRegion(string boardId, int index, NotesTurnRegion region)
+    {
+        var board = FindBoard(boardId);
+        if (board == null || board.FindRegion(region.Id) != null)
+        {
+            return false;
+        }
+        board.TurnRegions.Insert(Math.Clamp(index, 0, board.TurnRegions.Count), region);
+        return true;
+    }
+
+    public bool RemoveTurnRegion(string boardId, string regionId)
+    {
+        var board = FindBoard(boardId);
+        var region = board?.FindRegion(regionId);
+        if (board == null || region == null)
+        {
+            return false;
+        }
+        foreach (var node in board.NodesOfRegion(regionId).ToList())
+        {
+            board.Edges.RemoveAll(e => e.From == node.Id || e.To == node.Id);
+            board.Nodes.Remove(node);
+        }
+        board.TurnRegions.Remove(region);
+        return true;
+    }
+
+    public bool SetNodeRegion(string boardId, string nodeId, string regionId)
+    {
+        var node = FindBoard(boardId)?.FindNode(nodeId);
+        if (node == null)
+        {
+            return false;
+        }
+        node.RegionId = regionId;
         return true;
     }
 }

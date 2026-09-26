@@ -26,6 +26,9 @@ internal static class NotesRuntime
     /// <summary>Raised after any model change; the UI rebuilds from the model.</summary>
     public static event Action? Changed;
 
+    /// <summary>Raised when the captured operation log changes.</summary>
+    public static event Action? OpsChanged;
+
     private static bool _globalLoaded;
     private static float _retryTimer;
     private static bool _runDirty;
@@ -54,7 +57,8 @@ internal static class NotesRuntime
         var run = GameContext.CurrentRun;
         if (run != null)
         {
-            RunDocument = NotesPersistence.LoadRun(run);
+            RunDocument = NotesPersistence.LoadRun(run, out var ops);
+            NotesOpLog.Load(ops);
             Library = NotesLibrary.Run;
         }
         else
@@ -138,8 +142,23 @@ internal static class NotesRuntime
     /// the current library dirty for the debounced save.</summary>
     public static void Raise()
     {
+        try
+        {
+            NotesLayout.Apply(ActiveBoard);
+        }
+        catch
+        {
+            // layout is best-effort; never block the UI
+        }
         MarkDirty();
         Changed?.Invoke();
+    }
+
+    /// <summary>Operation log changed (captured or cleared); persist quietly.</summary>
+    public static void OnOpsChanged()
+    {
+        MarkDirty();
+        OpsChanged?.Invoke();
     }
 
     /// <summary>Marks the active library dirty without rebuilding the UI
@@ -202,7 +221,7 @@ internal static class NotesRuntime
             var run = GameContext.CurrentRun;
             if (run != null)
             {
-                NotesPersistence.SaveRun(run, RunDocument);
+                NotesPersistence.SaveRun(run, RunDocument, NotesOpLog.Entries);
             }
             _runDirty = false;
         }
@@ -223,6 +242,129 @@ internal static class NotesRuntime
         {
             _globalDirty = true;
         }
+    }
+
+    // ---- structured mode / op log --------------------------------------------
+
+    public static int CurrentTurn => GameContext.Combat?.TurnNumber ?? 0;
+
+    public static int OpsCount => NotesOpLog.Count;
+
+    public static NotesTurnRegion? FindActualRegion(int turn)
+    {
+        if (turn <= 0)
+        {
+            return null;
+        }
+        var board = ActiveBoard;
+        var line = board.WorldLines.FirstOrDefault();
+        return line == null
+            ? null
+            : board.TurnRegions.FirstOrDefault(r => r.WorldLineId == line.Id && r.TurnNumber == turn);
+    }
+
+    /// <summary>Auto-creates the current turn's region, but only after the player
+    /// has started using structured mode in this board (a world line exists).</summary>
+    public static void EnsureActualTurnRegion(int turn)
+    {
+        if (turn <= 0 || !RunActive)
+        {
+            return;
+        }
+        var document = ActiveDocument;
+        var board = ActiveBoard;
+        if (board.WorldLines.Count == 0)
+        {
+            return;
+        }
+        var line = document.EnsureActualWorldLine(board.Id);
+        document.EnsureTurnRegion(board.Id, line.Id, turn);
+        Raise();
+    }
+
+    public static bool HasRelicNode(int turn, string refId)
+    {
+        var region = FindActualRegion(turn);
+        if (region == null)
+        {
+            return false;
+        }
+        return ActiveBoard.NodesOfRegion(region.Id)
+            .Any(n => n.Kind == NodeKind.Relic && n.RefId == refId);
+    }
+
+    public static void AddTurnEvent(int turn, NotesAnnotation annotation)
+    {
+        if (turn <= 0 || !RunActive)
+        {
+            return;
+        }
+        var document = ActiveDocument;
+        var board = ActiveBoard;
+        var line = document.EnsureActualWorldLine(board.Id);
+        var region = document.EnsureTurnRegion(board.Id, line.Id, turn);
+        if (!region.TurnEvents.Any(a => a.RefId == annotation.RefId && a.Text == annotation.Text))
+        {
+            region.TurnEvents.Add(annotation.Clone());
+        }
+        Raise();
+    }
+
+    public static void NewWorldLine()
+    {
+        var board = ActiveBoard;
+        Commands.Execute(new AddWorldLineCommand(ActiveDocument, board.Id));
+        Raise();
+    }
+
+    /// <summary>Builds note nodes from the captured operations (idempotent).</summary>
+    public static void Import(bool currentTurnOnly)
+    {
+        var ops = NotesOpLog.Entries;
+        if (ops.Count == 0)
+        {
+            return;
+        }
+        var document = ActiveDocument;
+        var board = ActiveBoard;
+        var line = document.EnsureActualWorldLine(board.Id);
+
+        List<int> turns;
+        if (currentTurnOnly)
+        {
+            var turn = CurrentTurn;
+            if (turn <= 0)
+            {
+                return;
+            }
+            turns = new List<int> { turn };
+        }
+        else
+        {
+            turns = ops.Where(o => o.Turn > 0).Select(o => o.Turn).Distinct().OrderBy(t => t).ToList();
+        }
+
+        var commands = new List<INotesCommand>();
+        foreach (var turn in turns)
+        {
+            var region = document.EnsureTurnRegion(board.Id, line.Id, turn);
+            var plan = NotesImporter.Plan(board, region, ops);
+            commands.AddRange(plan.Nodes.Select(node => (INotesCommand)new AddNodeCommand(document, board.Id, node)));
+            commands.AddRange(plan.Edges.Select(edge => (INotesCommand)new AddEdgeCommand(document, board.Id, edge)));
+        }
+        if (commands.Count > 0)
+        {
+            Commands.Execute(new CompositeCommand(commands, "Import"));
+        }
+        Raise();
+    }
+
+    public static void ClearOps()
+    {
+        NotesOpLog.Clear();
+        MarkDirty();
+        OpsChanged?.Invoke();
+        Raise();
     }
 
     private static void EnsureGlobalLoaded()

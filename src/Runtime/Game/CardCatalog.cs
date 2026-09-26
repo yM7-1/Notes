@@ -86,6 +86,9 @@ internal static class CardCatalog
         Rarity: (int)card.Rarity,
         Upgraded: card.IsUpgraded);
 
+    /// <summary>Canonical cost; -1 = X / unknown.</summary>
+    public static int CostOf(CardModel card) => ResolveCost(card);
+
     public static string TitleOf(CardModel card)
     {
         try
