@@ -278,9 +278,10 @@ public partial class CanvasSurface : Control
         var title = ModLocalization.T("region_turn", "回合") + " " + region.TurnNumber;
         DrawString(font, new Vector2(region.X + 12, region.Y + 26), title, HorizontalAlignment.Left, -1, 13, color);
 
-        if (region.TurnEvents.Count > 0)
+        var chipEvents = region.TurnEvents.Where(e => !UiStyle.IsBoundaryAnnotation(e.RefId)).Take(3).ToList();
+        if (chipEvents.Count > 0)
         {
-            var text = string.Join(" · ", region.TurnEvents.Take(3).Select(e => e.Text));
+            var text = string.Join(" · ", chipEvents.Select(e => UiStyle.AnnotationText(e)));
             var size = font.GetStringSize(text, HorizontalAlignment.Left, -1, 10);
             var box = new Rect2(region.X + region.Width - size.X - 24, region.Y + 10, size.X + 12, 18);
             _labelBox.BgColor = UiStyle.BadgeBg;
@@ -288,6 +289,28 @@ public partial class CanvasSurface : Control
             DrawStyleBox(_labelBox, box);
             DrawString(font, box.Position + new Vector2(6, 13), text, HorizontalAlignment.Left, -1, 10,
                 UiStyle.KindColor(NodeKind.Relic, -1));
+        }
+
+        // Boundary annotations (enemy insertions, unattributed exhausts) sit on
+        // the bottom edge, i.e. between this turn and the next one.
+        var boundary = region.TurnEvents.Where(e => UiStyle.IsBoundaryAnnotation(e.RefId)).ToList();
+        for (var i = 0; i < boundary.Count; i++)
+        {
+            var annotation = boundary[i];
+            var accent = UiStyle.AnnotationColor(annotation.RefId);
+            var maxWidth = MathF.Max(80f, region.Width - 20f);
+            var text = UiStyle.Ellipsize(UiStyle.AnnotationText(annotation), font, 10, maxWidth - 12);
+            var size = font.GetStringSize(text, HorizontalAlignment.Left, -1, 10);
+            var width = size.X + 12;
+            var box = new Rect2(
+                region.X + (region.Width - width) / 2f,
+                region.Y + region.Height - 9f - i * 19f,
+                width,
+                18);
+            _labelBox.BgColor = UiStyle.BadgeBg;
+            _labelBox.BorderColor = accent;
+            DrawStyleBox(_labelBox, box);
+            DrawString(font, box.Position + new Vector2(6, 13), text, HorizontalAlignment.Left, -1, 10, accent);
         }
     }
 

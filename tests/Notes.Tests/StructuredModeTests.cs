@@ -123,7 +123,7 @@ public class StructuredModeTests
         var ops = new List<NotesOpData>
         {
             new() { Id = "op1", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 1, Title = "Strike" },
-            new() { Id = "op2", Kind = NotesOpKind.Exhaust, Turn = 1, UnixMs = 2, Title = "消耗" },
+            new() { Id = "op2", Kind = NotesOpKind.Potion, Turn = 1, UnixMs = 2, Title = "Fire Potion" },
         };
         var first = NotesImporter.Plan(board, region, ops);
         foreach (var node in first.Nodes)
@@ -144,19 +144,48 @@ public class StructuredModeTests
     }
 
     [Fact]
-    public void Importer_MapsExhaustOpsToExhaustNodes()
+    public void Importer_SkipsExhaustOps()
     {
-        Assert.Equal(NodeKind.Exhaust, NotesImporter.MapKind(NotesOpKind.Exhaust));
-
         var (doc, board, line) = NewStructured();
         var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
         var ops = new List<NotesOpData>
         {
             new() { Id = "op1", Kind = NotesOpKind.Exhaust, Turn = 1, UnixMs = 1, Title = "消耗×2" },
         };
-        var plan = NotesImporter.Plan(board, region, ops);
-        var node = Assert.Single(plan.Nodes);
-        Assert.Equal(NodeKind.Exhaust, node.Kind);
+
+        Assert.Empty(NotesImporter.Plan(board, region, ops).Nodes);
+    }
+
+    [Fact]
+    public void ImportCommands_ReplaceKeepsManualNodesAndOverwritesImported()
+    {
+        var (doc, board, line) = NewStructured();
+        var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
+        var manual = new NotesNode { Id = "manual", RegionId = region.Id, Title = "my idea" };
+        doc.AddNode(board.Id, manual);
+
+        var ops = new List<NotesOpData>
+        {
+            new() { Id = "op1", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 1, Title = "Strike" },
+            new() { Id = "op2", Kind = NotesOpKind.EndTurn, Turn = 1, UnixMs = 2, Title = "End turn" },
+        };
+        var first = NotesImporter.BuildCommands(doc, board, region, ops, replaceImported: true);
+        foreach (var command in first)
+        {
+            command.Do();
+        }
+        Assert.Equal(3, board.NodesOfRegion(region.Id).Count());
+        Assert.Contains(board.NodesOfRegion(region.Id), n => n.Id == "manual");
+
+        // Re-recording the turn replaces the imported chain instead of appending.
+        var second = NotesImporter.BuildCommands(doc, board, region, ops, replaceImported: true);
+        foreach (var command in second)
+        {
+            command.Do();
+        }
+        Assert.Equal(3, board.NodesOfRegion(region.Id).Count());
+        Assert.Contains(board.NodesOfRegion(region.Id), n => n.Id == "manual");
+        Assert.Equal(2, board.NodesOfRegion(region.Id).Count(n => n.SourceOpId.Length > 0));
     }
 
     [Fact]
@@ -186,6 +215,28 @@ public class StructuredModeTests
         Assert.Empty(board.TurnRegions);
         Assert.Equal("", board.Nodes[0].RegionId);
         Assert.NotNull(board.Nodes[0].Annotations);
+    }
+
+    [Fact]
+    public void Json_RoundTripsRichAnnotations()
+    {
+        var document = new NotesDocument();
+        var board = document.CreateBoard("b");
+        var node = new NotesNode { Id = "n1" };
+        node.Annotations.Add(new NotesAnnotation
+        {
+            RefId = "damage:扭动虫2",
+            Text = "扭动虫2",
+            Meta = "火焰药水\u001f1",
+            Count = 20,
+        });
+        board.Nodes.Add(node);
+
+        var back = NotesJson.Deserialize(NotesJson.Serialize(document));
+
+        var annotation = Assert.Single(back.ActiveBoard!.Nodes[0].Annotations);
+        Assert.Equal("火焰药水\u001f1", annotation.Meta);
+        Assert.Equal(20, annotation.Count);
     }
 
     [Fact]

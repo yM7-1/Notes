@@ -1,5 +1,6 @@
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
@@ -13,32 +14,37 @@ namespace Notes.Game;
 /// Hook sources (all synchronous / game-provided, independent of RitsuLib
 /// lifecycle patches which did not deliver combat events in testing):
 /// - CombatManager.CombatBegan / TurnStarted / TurnEnded (game events)
-/// - CombatHistory.CardPlayStarted (Harmony)
-/// - CardPile.AddInternal for hand/discard piles (Harmony)
+/// - CombatHistory.CardPlayStarted / DamageReceived / CardGenerated /
+///   MonsterPerformedMove (Harmony)
+/// - CardPile.AddInternal for hand/discard/exhaust piles (Harmony)
 /// - PotionModel.EnqueueManualUse (Harmony)
 /// - RelicModel.Flash (Harmony)
-/// Relic triggers and effect draws/discards within a short window after an
-/// operation become that operation's annotation; standalone runs become ops.
+/// Relic triggers, effect draws/discards, exhausted cards and dealt damage
+/// within a short window after an operation become that operation's annotation;
+/// standalone runs become turn events.
 /// </summary>
 internal static class NotesOpLog
 {
     private const long CauseWindowMs = 450;
+    private const long ExhaustWindowMs = 1500;
+    private const long DamageCauseWindowMs = 10_000;
     private const int DiagnosticEventLimit = 5;
 
     private static readonly List<NotesOpData> Ops = new();
     private static readonly object Gate = new();
+    private static readonly Dictionary<Creature, string> EnemyNames = new(ReferenceEqualityComparer.Instance);
+    private static readonly HashSet<CardModel> PendingGenerated = new(ReferenceEqualityComparer.Instance);
     private static string? _causeId;
     private static long _causeAtMs;
     private static NotesOpData? _drawBatch;
     private static NotesOpData? _discardBatch;
-    private static NotesOpData? _exhaustBatch;
     private static int _drawCount;
     private static int _discardCount;
-    private static int _exhaustCount;
     private static int _turn;
     private static int _diagnostics;
     private static bool _initialized;
     private static CombatState? _combatState;
+    private static Creature? _performingMonster;
 
     public static IReadOnlyList<NotesOpData> Entries
     {
@@ -83,11 +89,12 @@ internal static class NotesOpLog
             Ops.Clear();
             _drawBatch = null;
             _discardBatch = null;
-            _exhaustBatch = null;
             _drawCount = 0;
             _discardCount = 0;
-            _exhaustCount = 0;
             _causeId = null;
+            EnemyNames.Clear();
+            PendingGenerated.Clear();
+            _performingMonster = null;
         }
     }
 
@@ -120,7 +127,54 @@ internal static class NotesOpLog
         Clear();
         _turn = 0;
         _diagnostics = 0;
+        // Number same-named enemies left-to-right up front so the numbering is
+        // stable even after some of them die.
+        lock (Gate)
+        {
+            foreach (var enemy in state.Enemies)
+            {
+                EnsureEnemyName(enemy);
+            }
+        }
         Log.Info("[Notes] new combat detected; op log reset");
+    }
+
+    /// <summary>Display name of an enemy. When several enemies share a name they
+    /// are numbered left-to-right ("扭动虫1", "扭动虫2", ...); the numbering is
+    /// frozen per creature so later deaths never renumber the survivors.</summary>
+    private static string EnsureEnemyName(Creature creature)
+    {
+        if (EnemyNames.TryGetValue(creature, out var existing))
+        {
+            return existing;
+        }
+        var baseName = creature.Name;
+        var enemies = creature.CombatState?.Enemies ?? (IReadOnlyList<Creature>)Array.Empty<Creature>();
+        var sameName = enemies.Count(e => string.Equals(e.Name, baseName, StringComparison.Ordinal));
+        var display = baseName;
+        if (sameName > 1)
+        {
+            var index = 1;
+            foreach (var enemy in enemies)
+            {
+                if (ReferenceEquals(enemy, creature))
+                {
+                    break;
+                }
+                if (string.Equals(enemy.Name, baseName, StringComparison.Ordinal))
+                {
+                    index++;
+                }
+            }
+            display = baseName + index;
+            while (EnemyNames.Any(kv => kv.Key != creature && kv.Value == display))
+            {
+                index++;
+                display = baseName + index;
+            }
+        }
+        EnemyNames[creature] = display;
+        return display;
     }
 
     private static void OnTurnStarted(CombatState state)
@@ -128,6 +182,10 @@ internal static class NotesOpLog
         try
         {
             EnsureCombat(state);
+            lock (Gate)
+            {
+                _performingMonster = null; // a move never spans a turn boundary
+            }
             if (state.CurrentSide != CombatSide.Player)
             {
                 return;
@@ -151,6 +209,10 @@ internal static class NotesOpLog
             if (state.CurrentSide != CombatSide.Player)
             {
                 return;
+            }
+            lock (Gate)
+            {
+                _performingMonster = null;
             }
             EndBatches();
             var op = AddOp(NotesOpKind.EndTurn, ModLocalization.T("op_end_turn", "结束回合"));
@@ -201,6 +263,10 @@ internal static class NotesOpLog
         try
         {
             if (card == null || !ReferenceEquals(card.Owner, GameContext.LocalPlayer))
+            {
+                return;
+            }
+            if (TryHandleEnemyInsert(pileType, card))
             {
                 return;
             }
@@ -273,6 +339,107 @@ internal static class NotesOpLog
 
     // ---- shared handling ------------------------------------------------------
 
+    /// <summary>CombatHistory.DamageReceived: records who the player's operation
+    /// hit and for how much ("「打击」对 火炬头 造成 6 点伤害并击杀").</summary>
+    public static void OnDamage(Creature receiver, Creature? dealer, DamageResult result, CardModel? cardSource)
+    {
+        try
+        {
+            var player = GameContext.LocalPlayer;
+            if (player == null || dealer == null || !ReferenceEquals(dealer, player.Creature))
+            {
+                return;
+            }
+            if (receiver == null || receiver.IsPlayer || receiver.Side == CombatSide.Player)
+            {
+                return;
+            }
+            var op = FindDamageOp(cardSource);
+            if (op == null)
+            {
+                return;
+            }
+            var killed = result.WasTargetKilled;
+            lock (Gate)
+            {
+                var targetName = EnsureEnemyName(receiver);
+                var refId = "damage:" + targetName;
+                var existing = op.Annotations.FirstOrDefault(a => a.RefId == refId);
+                if (existing == null)
+                {
+                    op.Annotations.Add(new NotesAnnotation
+                    {
+                        RefId = refId,
+                        Text = targetName,
+                        Meta = op.Title + "\u001f" + (killed ? "1" : "0"),
+                        Count = result.TotalDamage,
+                    });
+                }
+                else
+                {
+                    existing.Count += result.TotalDamage;
+                    var wasKilled = existing.Meta.EndsWith("\u001f1", StringComparison.Ordinal);
+                    existing.Meta = op.Title + "\u001f" + (killed || wasKilled ? "1" : "0");
+                }
+            }
+            NotesRuntime.OnOpsChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] damage capture failed: " + ex);
+        }
+    }
+
+    /// <summary>CombatHistory.CardGenerated: cards generated with no player
+    /// creator (monster moves / monster powers) are remembered; the following
+    /// pile add becomes an "enemy inserted" boundary annotation.</summary>
+    public static void OnCardGenerated(CardModel card, Player? creator)
+    {
+        try
+        {
+            if (card == null || creator != null)
+            {
+                return;
+            }
+            if (!ReferenceEquals(card.Owner, GameContext.LocalPlayer))
+            {
+                return;
+            }
+            lock (Gate)
+            {
+                PendingGenerated.Add(card);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] generated-card capture failed: " + ex);
+        }
+    }
+
+    /// <summary>MonsterModel.PerformMove prefix: remembers the acting monster so
+    /// cards it inserts during the move can be attributed to it.</summary>
+    public static void OnMonsterMoveStart(MonsterModel monster)
+    {
+        lock (Gate)
+        {
+            _performingMonster = monster.Creature;
+        }
+    }
+
+    /// <summary>CombatHistory.MonsterPerformedMove (fired after the move): ends
+    /// the attribution window and freezes the monster's display name.</summary>
+    public static void OnMonsterMoveEnd(MonsterModel monster)
+    {
+        lock (Gate)
+        {
+            _performingMonster = null;
+            if (monster.Creature != null)
+            {
+                EnsureEnemyName(monster.Creature);
+            }
+        }
+    }
+
     private static void HandleDraw(CardModel card)
     {
         var name = CardCatalog.TitleOf(card);
@@ -322,27 +489,58 @@ internal static class NotesOpLog
     private static void HandleExhaust(CardModel card)
     {
         var name = CardCatalog.TitleOf(card);
-        if (IsCauseSelfMove(card.Id.ToString()))
-        {
-            return; // the played card itself exhausting after play
-        }
-        // Exhaust effects often hit several cards: merge them into one annotation.
+        // Exhausts never become their own legend: they merge into the causing
+        // operation's explanation (the played card itself included). Standalone
+        // exhausts (ethereal at end of turn, ...) land on the turn region.
         if (TryMergeExhaustCause(name))
         {
             return;
         }
+        NotesRuntime.MergeTurnEvent(_turn, new NotesAnnotation
+        {
+            RefId = "exhaust:",
+            Text = name,
+            Count = 1,
+        });
+    }
+
+    /// <summary>Enemy-inserted cards (creator == null at CardGenerated) are
+    /// recorded on the turn boundary: 【敌人】将【卡*N】加入到【牌堆】.</summary>
+    private static bool TryHandleEnemyInsert(PileType pileType, CardModel card)
+    {
         lock (Gate)
         {
-            if (_exhaustBatch == null)
+            if (!PendingGenerated.Remove(card))
             {
-                _exhaustBatch = NewOp(NotesOpKind.Exhaust, ModLocalization.T("op_exhaust", "消耗"));
-                Ops.Add(_exhaustBatch);
+                return false;
             }
-            _exhaustCount++;
-            _exhaustBatch.Meta = string.IsNullOrEmpty(_exhaustBatch.Meta) ? name : _exhaustBatch.Meta + ", " + name;
-            _exhaustBatch.Title = ModLocalization.T("op_exhaust", "消耗") + "×" + _exhaustCount;
-            NotesRuntime.OnOpsChanged();
         }
+        if (pileType is not (PileType.Draw or PileType.Discard or PileType.Hand or PileType.Exhaust))
+        {
+            return true; // consumed, but not a tracked combat pile
+        }
+        var pileKey = pileType switch
+        {
+            PileType.Draw => "pile_draw",
+            PileType.Hand => "pile_hand",
+            PileType.Exhaust => "pile_exhaust",
+            _ => "pile_discard",
+        };
+        string enemy;
+        lock (Gate)
+        {
+            enemy = _performingMonster != null
+                ? EnsureEnemyName(_performingMonster)
+                : ModLocalization.T("enemy_generic", "敌人");
+        }
+        NotesRuntime.MergeTurnEvent(_turn, new NotesAnnotation
+        {
+            RefId = "insert:" + enemy + "\u001f" + pileKey + "\u001f" + card.Id,
+            Text = CardCatalog.TitleOf(card),
+            Meta = enemy + "\u001f" + pileKey,
+            Count = 1,
+        });
+        return true;
     }
 
     private static void EndBatches()
@@ -351,10 +549,8 @@ internal static class NotesOpLog
         {
             _drawBatch = null;
             _discardBatch = null;
-            _exhaustBatch = null;
             _drawCount = 0;
             _discardCount = 0;
-            _exhaustCount = 0;
         }
     }
 
@@ -438,7 +634,7 @@ internal static class NotesOpLog
             {
                 if (enemy.IsAlive)
                 {
-                    enemies.Add(enemy.Name + " " + enemy.CurrentHp + "/" + enemy.MaxHp);
+                    enemies.Add(EnsureEnemyName(enemy) + " " + enemy.CurrentHp + "/" + enemy.MaxHp);
                 }
             }
             if (enemies.Count > 0)
@@ -483,10 +679,11 @@ internal static class NotesOpLog
     }
 
     /// <summary>Merges exhausted card names into one raw-name annotation
-    /// ("A、B"); the UI renders it as 「A」、「B」被消耗.</summary>
+    /// ("A、B"); the UI renders it as 「A」、「B」被消耗. The played card itself is
+    /// included, so e.g. playing 净化 records 「净化」、「进阶之灾」… 被消耗.</summary>
     private static bool TryMergeExhaustCause(string name)
     {
-        if (_causeId == null || Environment.TickCount64 - _causeAtMs > CauseWindowMs)
+        if (_causeId == null || Environment.TickCount64 - _causeAtMs > ExhaustWindowMs)
         {
             return false;
         }
@@ -500,19 +697,54 @@ internal static class NotesOpLog
             var existing = cause.Annotations.FirstOrDefault(a => a.RefId == "exhaust:");
             if (existing == null)
             {
-                cause.Annotations.Add(new NotesAnnotation { RefId = "exhaust:", Text = name });
+                cause.Annotations.Add(new NotesAnnotation { RefId = "exhaust:", Text = name, Meta = cause.Title });
             }
-            else if (!existing.Text.Contains(name, StringComparison.Ordinal))
+            else
             {
-                existing.Text += "、" + name;
+                if (existing.Meta.Length == 0)
+                {
+                    existing.Meta = cause.Title;
+                }
+                if (!existing.Text.Contains(name, StringComparison.Ordinal))
+                {
+                    existing.Text += "、" + name;
+                }
             }
         }
         NotesRuntime.OnOpsChanged();
         return true;
     }
 
+    /// <summary>The operation a damage instance belongs to: matched by card
+    /// source, else the current cause (card / potion) within a wide window
+    /// (potion damage resolves after the throw animation).</summary>
+    private static NotesOpData? FindDamageOp(CardModel? cardSource)
+    {
+        lock (Gate)
+        {
+            if (cardSource != null)
+            {
+                var refId = cardSource.Id.ToString();
+                for (var i = Ops.Count - 1; i >= 0; i--)
+                {
+                    var op = Ops[i];
+                    if (op.Turn == _turn && op.Kind == NotesOpKind.Card && op.RefId == refId)
+                    {
+                        return op;
+                    }
+                }
+            }
+            if (_causeId == null || Environment.TickCount64 - _causeAtMs > DamageCauseWindowMs)
+            {
+                return null;
+            }
+            var cause = Ops.FirstOrDefault(o => o.Id == _causeId);
+            return cause is { Kind: NotesOpKind.Card or NotesOpKind.Potion } ? cause : null;
+        }
+    }
+
     /// <summary>True when the moving card is the very card that was just played
-    /// (its own move to discard/exhaust must not become an annotation).</summary>
+    /// (its own move to the discard pile must not become a "discarded" chip).</summary>
     private static bool IsCauseSelfMove(string cardModelId)
     {
         if (_causeId == null || Environment.TickCount64 - _causeAtMs > CauseWindowMs)

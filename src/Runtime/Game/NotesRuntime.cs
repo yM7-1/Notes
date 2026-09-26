@@ -411,6 +411,37 @@ internal static class NotesRuntime
         Raise();
     }
 
+    /// <summary>Adds or merges an auto-captured turn event. Exhaust annotations
+    /// merge names into one chip; insertion annotations count copies.</summary>
+    public static void MergeTurnEvent(int turn, NotesAnnotation annotation)
+    {
+        if (turn <= 0 || !RunActive)
+        {
+            return;
+        }
+        var document = ActiveDocument;
+        var board = ActiveBoard;
+        var line = document.EnsureActualWorldLine(board.Id);
+        var region = document.EnsureTurnRegion(board.Id, line.Id, turn);
+        var existing = region.TurnEvents.FirstOrDefault(a => a.RefId == annotation.RefId);
+        if (existing == null)
+        {
+            region.TurnEvents.Add(annotation.Clone());
+        }
+        else if (annotation.RefId == "exhaust:")
+        {
+            if (!existing.Text.Contains(annotation.Text, StringComparison.Ordinal))
+            {
+                existing.Text += "、" + annotation.Text;
+            }
+        }
+        else
+        {
+            existing.Count += annotation.Count;
+        }
+        Raise();
+    }
+
     public static void NewWorldLine()
     {
         var document = ActiveDocument;
@@ -462,17 +493,7 @@ internal static class NotesRuntime
         foreach (var turn in turns)
         {
             var region = document.EnsureTurnRegion(board.Id, line.Id, turn);
-            var plan = NotesImporter.Plan(board, region, ops, replaceImported: currentTurnOnly);
-            if (currentTurnOnly)
-            {
-                // Overwrite: drop nodes previously imported into this turn region;
-                // manually placed nodes are kept.
-                commands.AddRange(board.NodesOfRegion(region.Id)
-                    .Where(n => n.SourceOpId.Length > 0)
-                    .Select(n => (INotesCommand)new RemoveNodeCommand(document, board.Id, n.Id)));
-            }
-            commands.AddRange(plan.Nodes.Select(node => (INotesCommand)new AddNodeCommand(document, board.Id, node)));
-            commands.AddRange(plan.Edges.Select(edge => (INotesCommand)new AddEdgeCommand(document, board.Id, edge)));
+            commands.AddRange(NotesImporter.BuildCommands(document, board, region, ops, replaceImported: currentTurnOnly));
             var last = ops
                 .Where(o => o.Turn == turn && o.Kind != NotesOpKind.TurnEvent)
                 .OrderBy(o => o.UnixMs)

@@ -91,23 +91,6 @@ public partial class NodeControl : Control
 
     private bool IsInPort(Vector2 localPosition) => localPosition.DistanceTo(PortOffset) <= 13f;
 
-    private static Color AnnotationColor(string refId)
-    {
-        if (refId.StartsWith("relic:", StringComparison.Ordinal))
-        {
-            return UiStyle.KindColor(NodeKind.Relic, -1);
-        }
-        if (refId.StartsWith("exhaust:", StringComparison.Ordinal))
-        {
-            return UiStyle.KindColor(NodeKind.Exhaust, -1);
-        }
-        if (refId.StartsWith("card:", StringComparison.Ordinal))
-        {
-            return UiStyle.KindColor(NodeKind.Draw, -1);
-        }
-        return UiStyle.PanelBorder;
-    }
-
     public override void _Draw()
     {
         var font = ThemeDB.FallbackFont;
@@ -199,7 +182,7 @@ public partial class NodeControl : Control
         if (_node.Annotations.Count > 0)
         {
             var badgeCenter = new Vector2(Size.X - 12, Size.Y - 12);
-            var accent = AnnotationColor(_node.Annotations[0].RefId);
+            var accent = UiStyle.AnnotationColor(_node.Annotations[0].RefId);
             DrawCircle(badgeCenter, 9f, UiStyle.BadgeBg);
             DrawCircle(badgeCenter, 9f, accent, false, 1.5f);
             var count = _node.Annotations.Count.ToString();

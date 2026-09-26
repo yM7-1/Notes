@@ -31,7 +31,9 @@ public static class NotesImporter
                 .ToHashSet(StringComparer.Ordinal);
 
         var turnOps = ops
-            .Where(o => o.Turn == region.TurnNumber && o.Kind != NotesOpKind.TurnEvent)
+            .Where(o => o.Turn == region.TurnNumber
+                && o.Kind != NotesOpKind.TurnEvent
+                && o.Kind != NotesOpKind.Exhaust) // exhausts live in op annotations / turn events
             .OrderBy(o => o.UnixMs)
             .ToList();
 
@@ -78,6 +80,30 @@ public static class NotesImporter
         }
 
         return plan;
+    }
+
+    /// <summary>Commands that materialize a turn import. With
+    /// <paramref name="replaceImported"/> the previously imported nodes of the
+    /// region are removed first, so "record this turn" overwrites instead of
+    /// appending; manually placed nodes survive.</summary>
+    public static List<INotesCommand> BuildCommands(
+        NotesDocument document,
+        NotesBoard board,
+        NotesTurnRegion region,
+        IReadOnlyList<NotesOpData> ops,
+        bool replaceImported)
+    {
+        var commands = new List<INotesCommand>();
+        var plan = Plan(board, region, ops, replaceImported);
+        if (replaceImported)
+        {
+            commands.AddRange(board.NodesOfRegion(region.Id)
+                .Where(n => n.SourceOpId.Length > 0)
+                .Select(n => (INotesCommand)new RemoveNodeCommand(document, board.Id, n.Id)));
+        }
+        commands.AddRange(plan.Nodes.Select(n => (INotesCommand)new AddNodeCommand(document, board.Id, n)));
+        commands.AddRange(plan.Edges.Select(e => (INotesCommand)new AddEdgeCommand(document, board.Id, e)));
+        return commands;
     }
 
     /// <summary>Tail among manually placed nodes only (used when imported nodes

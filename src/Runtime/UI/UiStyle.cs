@@ -162,18 +162,99 @@ internal static class UiStyle
         return ellipsis;
     }
 
-    /// <summary>Human-readable annotation text. Exhaust annotations store raw
-    /// names ("A、B") and render as 「A」、「B」被消耗.</summary>
+    /// <summary>Human-readable annotation text. Auto-captured annotations store
+    /// structured parts (raw names, enemy / pile, damage source) and are
+    /// rendered per language here.</summary>
     public static string AnnotationText(NotesAnnotation annotation)
     {
-        if (annotation.RefId.StartsWith("exhaust:", StringComparison.Ordinal))
+        var refId = annotation.RefId;
+        if (refId.StartsWith("exhaust:", StringComparison.Ordinal))
         {
-            var names = annotation.Text.Split('、', StringSplitOptions.RemoveEmptyEntries);
+            var names = annotation.Text.Split('、', StringSplitOptions.RemoveEmptyEntries).ToList();
+            // Put the played card (the op that caused the exhausts) first.
+            if (annotation.Meta.Length > 0)
+            {
+                var index = names.IndexOf(annotation.Meta);
+                if (index > 0)
+                {
+                    names.RemoveAt(index);
+                    names.Insert(0, annotation.Meta);
+                }
+            }
             var joined = ModLocalization.IsChinese
                 ? string.Join("」、「", names)
                 : string.Join(", ", names);
             return ModLocalization.T("annot_exhaust_fmt", "「{0}」被消耗").Replace("{0}", joined);
         }
+        if (refId.StartsWith("damage:", StringComparison.Ordinal))
+        {
+            var parts = annotation.Meta.Split('\u001f');
+            var source = parts.Length > 0 ? parts[0] : "";
+            var killed = parts.Length > 1 && parts[1] == "1";
+            return killed
+                ? Format("annot_damage_kill", "「{0}」对 {1} 造成 {2} 点伤害并击杀", source, annotation.Text, annotation.Count)
+                : Format("annot_damage", "「{0}」对 {1} 造成 {2} 点伤害", source, annotation.Text, annotation.Count);
+        }
+        if (refId.StartsWith("insert:", StringComparison.Ordinal))
+        {
+            var parts = annotation.Meta.Split('\u001f');
+            var enemy = parts.Length > 0 ? parts[0] : "";
+            var pileKey = parts.Length > 1 ? parts[1] : "";
+            var card = annotation.Count > 1
+                ? Format("annot_copies", "{0}*{1}", annotation.Text, annotation.Count)
+                : annotation.Text;
+            return Format("annot_insert", "【{0}】将【{1}】加入到【{2}】", enemy, card, PileLabel(pileKey));
+        }
         return annotation.Text;
+    }
+
+    /// <summary>Annotations that belong on the boundary between two turn
+    /// regions (enemy insertions, unattributed exhausts).</summary>
+    public static bool IsBoundaryAnnotation(string refId) =>
+        refId.StartsWith("exhaust:", StringComparison.Ordinal)
+        || refId.StartsWith("insert:", StringComparison.Ordinal);
+
+    /// <summary>Accent color for an annotation chip / badge.</summary>
+    public static Color AnnotationColor(string refId)
+    {
+        if (refId.StartsWith("relic:", StringComparison.Ordinal))
+        {
+            return KindColor(NodeKind.Relic, -1);
+        }
+        if (refId.StartsWith("exhaust:", StringComparison.Ordinal))
+        {
+            return KindColor(NodeKind.Exhaust, -1);
+        }
+        if (refId.StartsWith("insert:", StringComparison.Ordinal))
+        {
+            return Color.FromHtml("cf6f9a");
+        }
+        if (refId.StartsWith("damage:", StringComparison.Ordinal))
+        {
+            return Color.FromHtml("e06c5f");
+        }
+        if (refId.StartsWith("card:", StringComparison.Ordinal))
+        {
+            return KindColor(NodeKind.Draw, -1);
+        }
+        return PanelBorder;
+    }
+
+    private static string PileLabel(string key) => key switch
+    {
+        "pile_draw" => ModLocalization.T("pile_draw", "抽牌堆"),
+        "pile_hand" => ModLocalization.T("pile_hand", "手牌"),
+        "pile_exhaust" => ModLocalization.T("pile_exhaust", "消耗堆"),
+        _ => ModLocalization.T("pile_discard", "弃牌堆"),
+    };
+
+    private static string Format(string key, string fallback, params object[] args)
+    {
+        var text = ModLocalization.T(key, fallback);
+        for (var i = 0; i < args.Length; i++)
+        {
+            text = text.Replace("{" + i + "}", args[i]?.ToString() ?? "");
+        }
+        return text;
     }
 }
