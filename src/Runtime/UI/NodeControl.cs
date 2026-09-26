@@ -6,15 +6,21 @@ namespace Notes.UI;
 /// <summary>A draggable legend on the board: mini card or text note.</summary>
 public partial class NodeControl : Control
 {
-    public const float NodeWidth = 168f;
-    public const float NodeHeight = 54f;
+    public const float NodeWidth = 184f;
+    public const float NodeHeight = 62f;
+    private static readonly Vector2 PortOffset = new(NodeWidth - 11f, 11f);
 
     private BoardCanvas _canvas = null!;
     private NotesNode _node = null!;
+    private StyleBoxFlat _box = null!;
+    private StyleBoxFlat _bar = null!;
+    private StyleBoxFlat _badge = null!;
+    private bool _hover;
+    private bool _hoverPort;
     private bool _dragging;
     private bool _moved;
-    private Vector2 _pressLocal;
-    private Vector2 _startPos;
+    private Vector2 _grabOffset;
+    private Vector2 _startNodePosition;
 
     public string NodeId => _node.Id;
 
@@ -27,6 +33,28 @@ public partial class NodeControl : Control
         Position = new Vector2(node.X, node.Y);
         MouseFilter = MouseFilterEnum.Stop;
         FocusMode = FocusModeEnum.None;
+        MouseDefaultCursorShape = CursorShape.Move;
+
+        _box = new StyleBoxFlat();
+        _bar = new StyleBoxFlat();
+        _bar.SetCornerRadiusAll(2);
+        _bar.SetBorderWidthAll(0);
+        _badge = new StyleBoxFlat();
+        _badge.SetCornerRadiusAll(5);
+        _badge.SetBorderWidthAll(1);
+
+        MouseEntered += () =>
+        {
+            _hover = true;
+            QueueRedraw();
+        };
+        MouseExited += () =>
+        {
+            _hover = false;
+            _hoverPort = false;
+            QueueRedraw();
+        };
+
         UpdateTooltip();
     }
 
@@ -52,57 +80,79 @@ public partial class NodeControl : Control
         TooltipText = text;
     }
 
+    private bool IsInPort(Vector2 localPosition) => localPosition.DistanceTo(PortOffset) <= 13f;
+
     public override void _Draw()
     {
         var font = ThemeDB.FallbackFont;
-        var centerY = NodeHeight / 2f;
+        var typeColor = _node.Kind == NodeKind.Card ? UiStyle.TypeColor(_node.CardType) : UiStyle.Accent;
         var stateColor = UiStyle.StateColor(_node.State);
+
+        var border = _dragging || _hover
+            ? UiStyle.Accent
+            : _node.State == NodeState.None
+                ? UiStyle.PanelBorder.Lerp(typeColor, 0.4f)
+                : stateColor;
         var background = _node.Kind == NodeKind.Text ? UiStyle.NodeBgText : UiStyle.NodeBg;
-        if (_dragging)
+        if (_hover || _dragging)
         {
-            background = background.Lightened(0.06f);
+            background = background.Lightened(0.05f);
         }
 
-        DrawRect(new Rect2(0, 0, NodeWidth, NodeHeight), background, true);
-        DrawRect(new Rect2(1, 1, NodeWidth - 2, NodeHeight - 2), stateColor, false,
-            _node.State == NodeState.None ? 1f : 2.5f);
+        _box.BgColor = background;
+        _box.BorderColor = border;
+        _box.SetBorderWidthAll(_node.State == NodeState.None && !_hover ? 1 : 2);
+        _box.SetCornerRadiusAll(9);
+        DrawStyleBox(_box, new Rect2(Vector2.Zero, Size));
 
-        var typeColor = _node.Kind == NodeKind.Card ? UiStyle.TypeColor(_node.CardType) : UiStyle.Accent;
-        DrawRect(new Rect2(0, 0, 6, NodeHeight), typeColor, true);
+        _bar.BgColor = typeColor;
+        DrawStyleBox(_bar, new Rect2(8, 10, 4, Size.Y - 20));
 
+        var textX = 18f;
         if (_node.Kind == NodeKind.Card)
         {
-            var costCenter = new Vector2(24, centerY);
-            DrawCircle(costCenter, 12, Color.FromHtml("12141a"));
-            DrawCircle(costCenter, 12, UiStyle.RarityColor(_node.Rarity), false, 1.5f);
+            textX = 48f;
+            var costCenter = new Vector2(30, Size.Y / 2f);
+            DrawCircle(costCenter, 12.5f, UiStyle.BadgeBg);
+            DrawCircle(costCenter, 12.5f, UiStyle.RarityColor(_node.Rarity), false, 1.6f);
             var costText = _node.Cost < 0 ? "X" : _node.Cost.ToString();
             var costSize = font.GetStringSize(costText, HorizontalAlignment.Left, -1, 13);
             DrawString(font, costCenter + new Vector2(-costSize.X / 2f, costSize.Y / 2f - 3f), costText,
                 HorizontalAlignment.Left, -1, 13, UiStyle.TextMain);
         }
 
-        var textX = _node.Kind == NodeKind.Card ? 44f : 14f;
-        var maxWidth = NodeWidth - textX - 34f;
+        var hasNote = !string.IsNullOrWhiteSpace(_node.Note);
+        var maxWidth = NodeWidth - textX - (_node.State == NodeState.None ? 16f : 34f);
         var title = UiStyle.Ellipsize(_node.Title + (_node.Upgraded ? "+" : ""), font, 13, maxWidth);
-        DrawString(font, new Vector2(textX, centerY + 5), title, HorizontalAlignment.Left, -1, 13, UiStyle.TextMain);
-
-        var glyph = _node.State switch
+        DrawString(font, new Vector2(textX, hasNote ? 27 : Size.Y / 2f + 5f), title,
+            HorizontalAlignment.Left, -1, 13, UiStyle.TextMain);
+        if (hasNote)
         {
-            NodeState.Tried => "✔",
-            NodeState.Speculated => "?",
-            NodeState.Confirmed => "★",
-            _ => "",
-        };
-        if (glyph.Length > 0)
-        {
-            DrawString(font, new Vector2(NodeWidth - 18, 18), glyph, HorizontalAlignment.Left, -1, 12, stateColor);
+            var snippet = UiStyle.Ellipsize(_node.Note.Replace('\n', ' '), font, 10, maxWidth);
+            DrawString(font, new Vector2(textX, 46), snippet, HorizontalAlignment.Left, -1, 10, UiStyle.TextDim);
         }
 
-        DrawCircle(new Vector2(NodeWidth - 9, 9), 4.5f, typeColor);
-    }
+        if (_node.State != NodeState.None)
+        {
+            var glyph = _node.State switch
+            {
+                NodeState.Tried => "✔",
+                NodeState.Speculated => "?",
+                NodeState.Confirmed => "★",
+                _ => "",
+            };
+            var badge = new Rect2(Size.X - 26, 7, 19, 17);
+            _badge.BgColor = UiStyle.BadgeBg;
+            _badge.BorderColor = stateColor;
+            DrawStyleBox(_badge, badge);
+            var glyphSize = font.GetStringSize(glyph, HorizontalAlignment.Left, -1, 11);
+            DrawString(font, badge.Position + new Vector2((badge.Size.X - glyphSize.X) / 2f, badge.Size.Y - 4f),
+                glyph, HorizontalAlignment.Left, -1, 11, stateColor);
+        }
 
-    private bool IsInPort(Vector2 localPosition) =>
-        localPosition.DistanceTo(new Vector2(NodeWidth - 9, 9)) <= 12f;
+        DrawCircle(PortOffset, _hoverPort ? 8f : 6f, UiStyle.BadgeBg);
+        DrawCircle(PortOffset, _hoverPort ? 6.5f : 5f, _hoverPort ? UiStyle.Accent : typeColor);
+    }
 
     public override void _GuiInput(InputEvent @event)
     {
@@ -116,6 +166,12 @@ public partial class NodeControl : Control
                     AcceptEvent();
                     return;
                 }
+                if (_canvas.LinkMode)
+                {
+                    _canvas.LinkClick(_node.Id);
+                    AcceptEvent();
+                    return;
+                }
                 if (button.DoubleClick)
                 {
                     _canvas.OpenEditor(_node.Id);
@@ -124,8 +180,8 @@ public partial class NodeControl : Control
                 }
                 _dragging = true;
                 _moved = false;
-                _pressLocal = button.Position;
-                _startPos = Position;
+                _grabOffset = GetGlobalMousePosition() - GlobalPosition;
+                _startNodePosition = new Vector2(_node.X, _node.Y);
                 MoveToFront();
                 QueueRedraw();
                 AcceptEvent();
@@ -144,7 +200,7 @@ public partial class NodeControl : Control
                     QueueRedraw();
                     if (_moved)
                     {
-                        _canvas.CommitNodeMove(_node.Id, _startPos, Position);
+                        _canvas.CommitNodeMove(_node.Id, _startNodePosition, Position);
                     }
                     AcceptEvent();
                 }
@@ -155,17 +211,38 @@ public partial class NodeControl : Control
                 AcceptEvent();
             }
         }
-        else if (@event is InputEventMouseMotion motion && _dragging)
+        else if (@event is InputEventMouseMotion motion)
         {
-            var delta = motion.Position - _pressLocal;
-            if (!_moved && delta.Length() > 3f)
+            if (_dragging)
             {
-                _moved = true;
+                var target = GetGlobalMousePosition() - _grabOffset;
+                if (!_moved && target.DistanceTo(GlobalPosition) > 3f)
+                {
+                    _moved = true;
+                }
+                if (_moved)
+                {
+                    GlobalPosition = target;
+                    _node.X = Position.X;
+                    _node.Y = Position.Y;
+                    _canvas.OnNodeMoved();
+                }
+                AcceptEvent();
             }
-            Position = _startPos + delta;
-            _node.X = Position.X;
-            _node.Y = Position.Y;
-            _canvas.OnNodeMoved();
+            else
+            {
+                var overPort = IsInPort(motion.Position);
+                if (overPort != _hoverPort)
+                {
+                    _hoverPort = overPort;
+                    QueueRedraw();
+                }
+                MouseDefaultCursorShape = overPort ? CursorShape.PointingHand : CursorShape.Move;
+                if (_canvas.IsLinking)
+                {
+                    _canvas.OnNodeMoved();
+                }
+            }
         }
     }
 }

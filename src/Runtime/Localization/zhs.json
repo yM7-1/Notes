@@ -38,8 +38,12 @@
   "save": "保存",
   "cancel": "取消",
   "delete_board_text": "删除当前画板？此操作可用撤销恢复。",
-  "status_hint": "拖动节点移动 · 右上圆点拖出连线 · 右键打开菜单 · 滚轮缩放",
+  "status_hint": "拖动图例移动 · 圆点或「连线」建分支 · 右键菜单 · 滚轮缩放",
   "status_combat": "战斗中",
   "status_no_combat": "非战斗",
+  "link_mode": "连线",
+  "link_mode_tip": "连线模式：先点起点图例，再点目标图例生成分支；Esc 退出",
+  "status_link_hint": "连线模式：点击起点图例，再点击目标图例",
+  "status_link_source": "已选起点，点击另一图例完成连线（Esc 退出）",
   "library_switch_tip": "在「本局」与「全局」笔记库之间切换"
 }

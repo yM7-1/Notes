@@ -34,6 +34,8 @@ internal static class NotesRuntime
 
     public static bool RunActive => GameContext.CurrentRun != null;
 
+    public static bool GlobalLoaded => _globalLoaded;
+
     public static NotesDocument ActiveDocument =>
         Library == NotesLibrary.Run && RunActive ? RunDocument : GlobalDocument;
 
@@ -143,6 +145,30 @@ internal static class NotesRuntime
     /// <summary>Marks the active library dirty without rebuilding the UI
     /// (used by pan/zoom, where a full refresh would be wasteful).</summary>
     public static void ScheduleSave() => MarkDirty();
+
+    /// <summary>Remembers where the player parked the notes toggle button.</summary>
+    public static void SaveButtonPosition(float x, float y)
+    {
+        if (NotesPersistence.TryGetGlobalData(out var data))
+        {
+            data.ButtonX = x;
+            data.ButtonY = y;
+            NotesPersistence.SaveGlobalNow();
+        }
+    }
+
+    public static bool TryGetButtonPosition(out float x, out float y)
+    {
+        if (NotesPersistence.TryGetGlobalData(out var data) && data.ButtonX >= 0f && data.ButtonY >= 0f)
+        {
+            x = data.ButtonX;
+            y = data.ButtonY;
+            return true;
+        }
+        x = 0f;
+        y = 0f;
+        return false;
+    }
 
     public static void Tick(double delta)
     {

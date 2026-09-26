@@ -122,4 +122,39 @@ internal static class NotesPersistence
             Log.Error("[Notes] global data save failed: " + ex);
         }
     }
+
+    /// <summary>Live global data for UI preferences (button position).</summary>
+    public static bool TryGetGlobalData(out NotesGlobalData data)
+    {
+        try
+        {
+            if (_globalStore != null)
+            {
+                var live = _globalStore.Get<NotesGlobalData>(GlobalKey);
+                if (live != null)
+                {
+                    data = live;
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] global data read failed: " + ex);
+        }
+        data = new NotesGlobalData();
+        return false;
+    }
+
+    public static void SaveGlobalNow()
+    {
+        try
+        {
+            _globalStore?.Save(GlobalKey);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] global data flush failed: " + ex);
+        }
+    }
 }

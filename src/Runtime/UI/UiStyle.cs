@@ -6,44 +6,51 @@ namespace Notes.UI;
 /// <summary>Shared colors and small style helpers for the notes UI.</summary>
 internal static class UiStyle
 {
-    public static readonly Color WindowBg = Color.FromHtml("16181d");
-    public static readonly Color PanelBg = Color.FromHtml("1f222a");
-    public static readonly Color NodeBg = Color.FromHtml("20232b");
-    public static readonly Color NodeBgText = Color.FromHtml("23262e");
-    public static readonly Color PanelBorder = Color.FromHtml("3a3f4b");
-    public static readonly Color TextMain = Color.FromHtml("e6e8ee");
-    public static readonly Color TextDim = Color.FromHtml("9aa0ab");
+    public static readonly Color WindowBg = Color.FromHtml("171a20");
+    public static readonly Color PanelBg = Color.FromHtml("1e222b");
+    public static readonly Color NodeBg = Color.FromHtml("232833");
+    public static readonly Color NodeBgText = Color.FromHtml("262b36");
+    public static readonly Color CanvasBg = Color.FromHtml("12141a");
+    public static readonly Color GridDot = Color.FromHtml("262b34");
+    public static readonly Color PanelBorder = Color.FromHtml("363c49");
+    public static readonly Color TextMain = Color.FromHtml("e8eaf0");
+    public static readonly Color TextDim = Color.FromHtml("9aa1ad");
     public static readonly Color Accent = Color.FromHtml("f0c674");
-    public static readonly Color EdgeDefault = Color.FromHtml("6b7280");
+    public static readonly Color EdgeDefault = Color.FromHtml("707a8a");
+    public static readonly Color BadgeBg = Color.FromHtml("0f1116");
+    public static readonly Color ButtonBg = Color.FromHtml("262b35");
+    public static readonly Color ButtonHover = Color.FromHtml("303743");
+    public static readonly Color ButtonPressed = Color.FromHtml("1c2029");
+    public static readonly Color AccentButtonBg = Color.FromHtml("3d3524");
 
     public static Color TypeColor(int cardType) => cardType switch
     {
-        1 => Color.FromHtml("d95f5f"),
-        2 => Color.FromHtml("57a773"),
-        3 => Color.FromHtml("5b8def"),
+        1 => Color.FromHtml("e06c5f"),
+        2 => Color.FromHtml("5cb87f"),
+        3 => Color.FromHtml("6a94e8"),
         4 => Color.FromHtml("8a8f98"),
-        5 => Color.FromHtml("9b6bd3"),
-        6 => Color.FromHtml("c8a24a"),
+        5 => Color.FromHtml("a678d6"),
+        6 => Color.FromHtml("d2ab55"),
         _ => Color.FromHtml("8a8f98"),
     };
 
     public static Color StateColor(NodeState state) => state switch
     {
-        NodeState.Tried => Color.FromHtml("7f8c8d"),
-        NodeState.Speculated => Color.FromHtml("e0a030"),
-        NodeState.Confirmed => Color.FromHtml("4caf7d"),
+        NodeState.Tried => Color.FromHtml("8894a2"),
+        NodeState.Speculated => Color.FromHtml("e8b04b"),
+        NodeState.Confirmed => Color.FromHtml("5fc08a"),
         _ => PanelBorder,
     };
 
     public static Color RarityColor(int rarity) => rarity switch
     {
-        3 => Color.FromHtml("5b8def"),
+        3 => Color.FromHtml("6a94e8"),
         4 => Color.FromHtml("f0c674"),
         5 => Color.FromHtml("e08a4a"),
-        6 => Color.FromHtml("57a773"),
+        6 => Color.FromHtml("5cb87f"),
         7 => Color.FromHtml("8a8f98"),
-        8 => Color.FromHtml("9b6bd3"),
-        _ => Color.FromHtml("6b7280"),
+        8 => Color.FromHtml("a678d6"),
+        _ => Color.FromHtml("6f7784"),
     };
 
     public static StyleBoxFlat Box(Color background, Color border, int radius = 6, int borderWidth = 1)
@@ -56,6 +63,56 @@ internal static class UiStyle
         style.ContentMarginTop = 4;
         style.ContentMarginBottom = 4;
         return style;
+    }
+
+    public static StyleBoxFlat ButtonStyle(Color background, Color border, int radius = 7, int padX = 12, int padY = 5)
+    {
+        var style = new StyleBoxFlat { BgColor = background, BorderColor = border };
+        style.SetBorderWidthAll(1);
+        style.SetCornerRadiusAll(radius);
+        style.ContentMarginLeft = padX;
+        style.ContentMarginRight = padX;
+        style.ContentMarginTop = padY;
+        style.ContentMarginBottom = padY;
+        return style;
+    }
+
+    public static void StyleButton(Button button, bool accent = false, int fontSize = 12)
+    {
+        var normal = accent ? AccentButtonBg : ButtonBg;
+        var hover = accent ? Color.FromHtml("4a4130") : ButtonHover;
+        var pressed = accent ? Color.FromHtml("56482f") : ButtonPressed;
+        var border = accent ? Accent : PanelBorder;
+
+        button.AddThemeStyleboxOverride("normal", ButtonStyle(normal, border));
+        button.AddThemeStyleboxOverride("hover", ButtonStyle(hover, border));
+        button.AddThemeStyleboxOverride("pressed", ButtonStyle(pressed, border));
+        button.AddThemeStyleboxOverride("disabled", ButtonStyle(Color.FromHtml("1a1d24"), Color.FromHtml("2b303a")));
+        button.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        button.AddThemeColorOverride("font_color", TextMain);
+        button.AddThemeColorOverride("font_hover_color", Colors.White);
+        button.AddThemeColorOverride("font_pressed_color", Accent);
+        button.AddThemeColorOverride("font_disabled_color", Color.FromHtml("5b6069"));
+        button.AddThemeFontSizeOverride("font_size", fontSize);
+        button.FocusMode = Control.FocusModeEnum.None;
+    }
+
+    public static void StyleHandle(Panel panel, bool open)
+    {
+        var border = open ? Accent : PanelBorder;
+        var background = open ? Color.FromHtml("2e2a1e") : Color.FromHtml("1c2029");
+        panel.AddThemeStyleboxOverride("panel", ButtonStyle(background, border, 10, 10, 8));
+    }
+
+    public static void StyleRow(Button row)
+    {
+        row.AddThemeStyleboxOverride("normal", ButtonStyle(Color.FromHtml("20242d"), Color.FromHtml("2c313c"), 6, 8, 3));
+        row.AddThemeStyleboxOverride("hover", ButtonStyle(Color.FromHtml("2a303b"), Color.FromHtml("414958"), 6, 8, 3));
+        row.AddThemeStyleboxOverride("pressed", ButtonStyle(Color.FromHtml("1a1e26"), Accent, 6, 8, 3));
+        row.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        row.AddThemeColorOverride("font_color", TextMain);
+        row.AddThemeColorOverride("font_hover_color", Colors.White);
+        row.FocusMode = Control.FocusModeEnum.None;
     }
 
     public static string Ellipsize(string text, Font font, int fontSize, float maxWidth)

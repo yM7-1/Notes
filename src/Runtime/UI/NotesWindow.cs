@@ -8,6 +8,7 @@ public partial class NotesWindow : PanelContainer
 {
     private OptionButton _boardPicker = null!;
     private Button _libraryButton = null!;
+    private Button _linkButton = null!;
     private Button _undoButton = null!;
     private Button _redoButton = null!;
     private Label _status = null!;
@@ -18,12 +19,12 @@ public partial class NotesWindow : PanelContainer
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(980, 620);
+        CustomMinimumSize = new Vector2(1000, 640);
         Position = new Vector2(48, 40);
-        AddThemeStyleboxOverride("panel", UiStyle.Box(UiStyle.WindowBg, UiStyle.PanelBorder, 8, 2));
+        AddThemeStyleboxOverride("panel", UiStyle.Box(UiStyle.WindowBg, UiStyle.PanelBorder, 10, 2));
 
         var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 6);
+        root.AddThemeConstantOverride("separation", 8);
         AddChild(root);
 
         var header = new HBoxContainer();
@@ -32,6 +33,7 @@ public partial class NotesWindow : PanelContainer
 
         var title = new Label { Text = ModLocalization.T("window_title", "Notes") };
         title.AddThemeFontSizeOverride("font_size", 16);
+        title.AddThemeColorOverride("font_color", UiStyle.Accent);
         header.AddChild(title);
 
         _libraryButton = MakeButton("", OnLibraryPressed);
@@ -49,6 +51,16 @@ public partial class NotesWindow : PanelContainer
         header.AddChild(MakeButton(ModLocalization.T("board_new", "+ Board"), () => NotesRuntime.NewBoard()));
         header.AddChild(MakeButton(ModLocalization.T("board_delete", "Del Board"), ShowDeleteBoard));
         header.AddChild(MakeButton(ModLocalization.T("add_text", "+ Text"), AddTextHere));
+
+        _linkButton = new Button
+        {
+            Text = ModLocalization.T("link_mode", "Link"),
+            ToggleMode = true,
+            TooltipText = ModLocalization.T("link_mode_tip", "Link mode"),
+        };
+        UiStyle.StyleButton(_linkButton, accent: true);
+        _linkButton.Toggled += OnLinkToggled;
+        header.AddChild(_linkButton);
 
         _undoButton = MakeButton(ModLocalization.T("undo", "Undo"), () =>
         {
@@ -68,15 +80,16 @@ public partial class NotesWindow : PanelContainer
         header.AddChild(MakeButton(ModLocalization.T("close", "Close"), Hide));
 
         var body = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
-        body.AddThemeConstantOverride("separation", 6);
+        body.AddThemeConstantOverride("separation", 8);
         root.AddChild(body);
 
         _canvas = new BoardCanvas
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             SizeFlagsVertical = SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(620, 480),
+            CustomMinimumSize = new Vector2(640, 500),
         };
+        _canvas.SetBackdrop(UiStyle.CanvasBg);
         body.AddChild(_canvas);
 
         _palette = new CardPalette { SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -124,6 +137,12 @@ public partial class NotesWindow : PanelContainer
         }
         if (@event is not InputEventKey key || !key.Pressed || key.Echo)
         {
+            return;
+        }
+        if (key.Keycode == Key.Escape && _canvas.LinkMode)
+        {
+            _linkButton.ButtonPressed = false;
+            GetViewport().SetInputAsHandled();
             return;
         }
         var ctrl = key.CtrlPressed || key.MetaPressed;
@@ -183,7 +202,18 @@ public partial class NotesWindow : PanelContainer
             var combat = GameContext.InCombat
                 ? ModLocalization.T("status_combat", "In combat")
                 : ModLocalization.T("status_no_combat", "Not in combat");
-            _status.Text = combat + "  ·  " + ModLocalization.T("status_hint", "");
+            string hint;
+            if (_canvas.LinkMode)
+            {
+                hint = _canvas.IsLinking
+                    ? ModLocalization.T("status_link_source", "Pick a target to finish the branch (Esc to exit)")
+                    : ModLocalization.T("status_link_hint", "Link mode: click the source node, then the target");
+            }
+            else
+            {
+                hint = ModLocalization.T("status_hint", "");
+            }
+            _status.Text = combat + "  ·  " + hint;
         }
         finally
         {
@@ -197,6 +227,12 @@ public partial class NotesWindow : PanelContainer
         NotesRuntime.SetLibrary(NotesRuntime.Library == NotesLibrary.Run
             ? NotesLibrary.Global
             : NotesLibrary.Run);
+    }
+
+    private void OnLinkToggled(bool pressed)
+    {
+        _canvas.SetLinkMode(pressed);
+        RefreshHeader();
     }
 
     private void OnBoardSelected(long index)
@@ -226,11 +262,8 @@ public partial class NotesWindow : PanelContainer
 
     private static Button MakeButton(string text, Action onPressed)
     {
-        var button = new Button
-        {
-            Text = text,
-            FocusMode = FocusModeEnum.None,
-        };
+        var button = new Button { Text = text };
+        UiStyle.StyleButton(button);
         button.Pressed += onPressed;
         return button;
     }

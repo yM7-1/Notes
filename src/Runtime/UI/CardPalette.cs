@@ -162,8 +162,8 @@ public partial class DragCardButton : Button
         Text = $"{snapshot.CostText} · {snapshot.DisplayTitle}";
         TooltipText = snapshot.RefId;
         Alignment = HorizontalAlignment.Left;
-        FocusMode = FocusModeEnum.None;
         CustomMinimumSize = new Vector2(0, 26);
+        UiStyle.StyleRow(this);
     }
 
     public override Variant _GetDragData(Vector2 atPosition)

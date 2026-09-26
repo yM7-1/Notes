@@ -36,10 +36,27 @@ public partial class BoardCanvas : Control
     private string _menuNodeId = "";
     private string _menuEdgeId = "";
     private bool _panning;
+    private bool _linkMode;
+    private Color _backdrop = UiStyle.CanvasBg;
 
     public bool IsLinking => _linkFrom != null;
 
+    public void SetBackdrop(Color color)
+    {
+        _backdrop = color;
+        QueueRedraw();
+    }
+
+    public override void _Draw()
+    {
+        DrawRect(new Rect2(Vector2.Zero, Size), _backdrop, true);
+    }
+
+    public bool LinkMode => _linkMode;
+
     public string? LinkFromId => _linkFrom;
+
+    public string? ActiveLinkSource => _linkFrom;
 
     public override void _Ready()
     {
@@ -90,7 +107,10 @@ public partial class BoardCanvas : Control
     private void OnRuntimeChanged()
     {
         _board = NotesRuntime.ActiveBoard;
-        _linkFrom = null;
+        if (_linkFrom != null && _board?.FindNode(_linkFrom) == null)
+        {
+            _linkFrom = null;
+        }
         _surface.SetBoard(_board);
         ApplyView();
     }
@@ -161,11 +181,12 @@ public partial class BoardCanvas : Control
                 if (IsLinking)
                 {
                     CancelLink();
+                    NotesRuntime.Raise();
                     AcceptEvent();
                     return;
                 }
                 var local = _surface.GetLocalMousePosition();
-                if (_surface.TryGetEdgeNear(local, 8f, out var edgeId))
+                if (_surface.TryGetEdgeNear(local, 10f, out var edgeId))
                 {
                     _menuEdgeId = edgeId;
                     _edgeMenu.Popup(new Rect2I((Vector2I)GetGlobalMousePosition(), Vector2I.Zero));
@@ -271,6 +292,46 @@ public partial class BoardCanvas : Control
     {
         _linkFrom = nodeId;
         _surface.QueueRedraw();
+    }
+
+    /// <summary>Enables click-to-link mode (click source, then click target).</summary>
+    public void SetLinkMode(bool enabled)
+    {
+        _linkMode = enabled;
+        if (!enabled)
+        {
+            _linkFrom = null;
+        }
+        _surface.QueueRedraw();
+    }
+
+    /// <summary>A node was clicked while link mode is on.</summary>
+    public void LinkClick(string nodeId)
+    {
+        if (_board == null)
+        {
+            return;
+        }
+        if (_linkFrom == null)
+        {
+            BeginLink(nodeId);
+            NotesRuntime.Raise();
+            return;
+        }
+        if (_linkFrom == nodeId)
+        {
+            CancelLink();
+            NotesRuntime.Raise();
+            return;
+        }
+        var edge = new NotesEdge
+        {
+            Id = IdFactory.NewEdgeId(),
+            From = _linkFrom,
+            To = nodeId,
+        };
+        NotesRuntime.Commands.Execute(new AddEdgeCommand(NotesRuntime.ActiveDocument, _board.Id, edge));
+        NotesRuntime.Raise();
     }
 
     public void CancelLink()

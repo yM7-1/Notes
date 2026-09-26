@@ -38,8 +38,12 @@
   "save": "Save",
   "cancel": "Cancel",
   "delete_board_text": "Delete the current board? You can undo this.",
-  "status_hint": "Drag nodes to move · drag the top-right dot to branch · right-click for menu · wheel to zoom",
+  "status_hint": "Drag nodes to move · dot or Link mode to branch · right-click menu · wheel to zoom",
   "status_combat": "In combat",
   "status_no_combat": "Not in combat",
+  "link_mode": "Link",
+  "link_mode_tip": "Link mode: click the source node, then the target node; Esc to exit",
+  "status_link_hint": "Link mode: click the source node, then the target node",
+  "status_link_source": "Source picked — click another node to finish (Esc to exit)",
   "library_switch_tip": "Switch between the run library and the global library"
 }

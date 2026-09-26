@@ -29,7 +29,9 @@
 - 反编译源码（只读）：`/mnt/d/0_git/BrainFog/.refs/{sts2-v0.111.0,ritsulib-0.6.2}`
 - 同类工程：`/mnt/d/0_git/BrainFog`（RitsuLib + 工程化模板）、`/mnt/d/0_git/CombatSolver`
 
-## 当前状态（2026-09-26，v0.1.0）
+## 当前状态（2026-09-26，v0.2.0）
 
 - M1 已实现：画布/节点/连线/状态标记/手牌与全卡托盘/撤销重做/本局+全局持久化/i18n(zhs,eng)
+- v0.2.0：节点拖动跟手修复（全局鼠标坐标）、「连线」模式、贝塞尔分支 + 点阵网格 +
+  圆角节点美化、右侧居中可拖动开关把手（位置持久化 `NotesGlobalData.ButtonX/Y`）
 - 待办：实机验收、卡面缩略图（atlas）、工坊发布物料、设置页（RitsuLib `[ModSettingsPage]`）
