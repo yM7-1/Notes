@@ -40,6 +40,14 @@ public partial class CanvasSurface : Control
         _labelBox.ContentMarginBottom = 1;
     }
 
+    public void RefreshNodeDraw()
+    {
+        foreach (var control in _nodes.Values)
+        {
+            control.QueueRedraw();
+        }
+    }
+
     public void SetBoard(NotesBoard? board)
     {
         _board = board;
@@ -232,6 +240,13 @@ public partial class CanvasSurface : Control
             }
             label += " · " + line.Name;
             DrawString(font, new Vector2(headerX, headerY), label, HorizontalAlignment.Left, -1, 14, color);
+            if (NotesRuntime.SelectionKind == NotesSelectionKind.WorldLine
+                && NotesRuntime.SelectionId == line.Id)
+            {
+                var size = font.GetStringSize(label, HorizontalAlignment.Left, -1, 14);
+                DrawLine(new Vector2(headerX, headerY + 4), new Vector2(headerX + size.X, headerY + 4),
+                    UiStyle.Accent, 2f, true);
+            }
 
             for (var i = 0; i < regions.Count; i++)
             {
@@ -255,8 +270,10 @@ public partial class CanvasSurface : Control
     private void DrawRegion(NotesTurnRegion region, Color color, Font font)
     {
         var rect = new Rect2(region.X, region.Y, region.Width, region.Height);
+        var selected = NotesRuntime.SelectionKind == NotesSelectionKind.Region
+            && NotesRuntime.SelectionId == region.Id;
         DrawRect(rect, Color.FromHtml("1b1f27cc"), true);
-        DrawDashedRect(rect, color.Lerp(UiStyle.PanelBorder, 0.45f), 1.5f);
+        DrawDashedRect(rect, selected ? UiStyle.Accent : color.Lerp(UiStyle.PanelBorder, 0.45f), selected ? 2.5f : 1.5f);
 
         var title = ModLocalization.T("region_turn", "回合") + " " + region.TurnNumber;
         DrawString(font, new Vector2(region.X + 12, region.Y + 26), title, HorizontalAlignment.Left, -1, 13, color);

@@ -242,8 +242,9 @@ internal static class NotesOpLog
                 return;
             }
             EndBatches();
-            AddOp(NotesOpKind.EndTurn, ModLocalization.T("op_end_turn", "结束回合"));
+            var op = AddOp(NotesOpKind.EndTurn, ModLocalization.T("op_end_turn", "结束回合"));
             _causeId = null;
+            NotesRuntime.UpdateActualRegionSnapshot(_turn, op.Snapshot, op.Hp, op.MaxHp);
         }
         catch (Exception ex)
         {
@@ -315,14 +316,92 @@ internal static class NotesOpLog
         return op;
     }
 
-    private static NotesOpData NewOp(NotesOpKind kind, string title) => new()
+    private static NotesOpData NewOp(NotesOpKind kind, string title)
     {
-        Id = IdFactory.NewOpId(),
-        Kind = kind,
-        Turn = _turn,
-        UnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-        Title = title,
-    };
+        var op = new NotesOpData
+        {
+            Id = IdFactory.NewOpId(),
+            Kind = kind,
+            Turn = _turn,
+            UnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Title = title,
+        };
+        var snapshot = BuildSnapshot();
+        op.Snapshot = snapshot.Text;
+        op.Hp = snapshot.Hp;
+        op.MaxHp = snapshot.MaxHp;
+        return op;
+    }
+
+    /// <summary>Player + enemy state right now, for the inspector panel.</summary>
+    private static (string Text, int Hp, int MaxHp) BuildSnapshot()
+    {
+        try
+        {
+            var player = GameContext.LocalPlayer;
+            if (player == null)
+            {
+                return ("", -1, -1);
+            }
+            var creature = player.Creature;
+            var parts = new List<string>
+            {
+                ModLocalization.T("snap_hp", "HP") + " " + creature.CurrentHp + "/" + creature.MaxHp
+                    + (creature.Block > 0 ? "  " + ModLocalization.T("snap_block", "Block") + " " + creature.Block : ""),
+            };
+            var combat = player.PlayerCombatState;
+            if (combat != null)
+            {
+                parts.Add(ModLocalization.T("snap_energy", "Energy") + " " + combat.Energy + "/" + combat.MaxEnergy);
+            }
+            var buffs = creature.Powers
+                .Where(p => p.Amount != 0)
+                .Take(6)
+                .Select(p => PowerName(p) + (Math.Abs(p.Amount) != 1 ? "×" + p.Amount : ""))
+                .ToList();
+            if (buffs.Count > 0)
+            {
+                parts.Add(string.Join("  ", buffs));
+            }
+            var potions = player.Potions.Take(3).Select(PotionTitle).ToList();
+            parts.Add(ModLocalization.T("snap_potions", "Potions") + ": "
+                + (potions.Count > 0 ? string.Join(", ", potions) : ModLocalization.T("snap_none", "none")));
+            var enemies = new List<string>();
+            foreach (var enemy in creature.CombatState?.Enemies ?? (IReadOnlyList<MegaCrit.Sts2.Core.Entities.Creatures.Creature>)Array.Empty<MegaCrit.Sts2.Core.Entities.Creatures.Creature>())
+            {
+                if (enemy.IsAlive)
+                {
+                    enemies.Add(enemy.Name + " " + enemy.CurrentHp + "/" + enemy.MaxHp);
+                }
+            }
+            if (enemies.Count > 0)
+            {
+                parts.Add(ModLocalization.T("snap_enemies", "Enemies") + ": " + string.Join("; ", enemies));
+            }
+            return (string.Join("\n", parts), creature.CurrentHp, creature.MaxHp);
+        }
+        catch
+        {
+            return ("", -1, -1);
+        }
+    }
+
+    private static string PowerName(PowerModel power)
+    {
+        try
+        {
+            var title = power.Title.GetFormattedText();
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                return title;
+            }
+        }
+        catch
+        {
+            // fall back to entry id
+        }
+        return power.Id.Entry ?? "";
+    }
 
     private static void SetCause(NotesOpData op)
     {

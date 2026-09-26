@@ -39,6 +39,14 @@ public sealed class NotesOpData
     /// <summary>Extra payload (e.g. drawn card names for a grouped draw op).</summary>
     public string Meta { get; set; } = "";
 
+    /// <summary>Player/enemy state right after this operation (inspector text).</summary>
+    public string Snapshot { get; set; } = "";
+
+    /// <summary>Player HP after the operation; -1 = unknown.</summary>
+    public int Hp { get; set; } = -1;
+
+    public int MaxHp { get; set; } = -1;
+
     public List<NotesAnnotation> Annotations { get; set; } = new();
 
     public NotesOpData Clone() => new()
@@ -54,6 +62,9 @@ public sealed class NotesOpData
         Rarity = Rarity,
         Upgraded = Upgraded,
         Meta = Meta,
+        Snapshot = Snapshot,
+        Hp = Hp,
+        MaxHp = MaxHp,
         Annotations = Annotations.Select(a => a.Clone()).ToList(),
     };
 }

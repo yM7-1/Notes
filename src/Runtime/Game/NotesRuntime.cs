@@ -9,6 +9,14 @@ internal enum NotesLibrary
     Global,
 }
 
+internal enum NotesSelectionKind
+{
+    None,
+    Node,
+    Region,
+    WorldLine,
+}
+
 /// <summary>
 /// In-memory state of the notes mod: the two documents, the active library /
 /// board, the undo stack and debounced persistence. All UI talks to this class.
@@ -28,6 +36,32 @@ internal static class NotesRuntime
 
     /// <summary>Raised when the captured operation log changes.</summary>
     public static event Action? OpsChanged;
+
+    /// <summary>Raised when the inspected node / region / world line changes.</summary>
+    public static event Action? SelectionChanged;
+
+    public static NotesSelectionKind SelectionKind { get; private set; } = NotesSelectionKind.None;
+
+    public static string SelectionId { get; private set; } = "";
+
+    public static void SelectNode(string nodeId) => SetSelection(NotesSelectionKind.Node, nodeId);
+
+    public static void SelectRegion(string regionId) => SetSelection(NotesSelectionKind.Region, regionId);
+
+    public static void SelectWorldLine(string worldLineId) => SetSelection(NotesSelectionKind.WorldLine, worldLineId);
+
+    public static void ClearSelection() => SetSelection(NotesSelectionKind.None, "");
+
+    private static void SetSelection(NotesSelectionKind kind, string id)
+    {
+        if (kind == SelectionKind && id == SelectionId)
+        {
+            return;
+        }
+        SelectionKind = kind;
+        SelectionId = id;
+        SelectionChanged?.Invoke();
+    }
 
     private static bool _globalLoaded;
     private static float _retryTimer;
@@ -263,8 +297,8 @@ internal static class NotesRuntime
             : board.TurnRegions.FirstOrDefault(r => r.WorldLineId == line.Id && r.TurnNumber == turn);
     }
 
-    /// <summary>Auto-creates the current turn's region, but only after the player
-    /// has started using structured mode in this board (a world line exists).</summary>
+    /// <summary>Auto-creates the current turn's region of the actual world line
+    /// (regions now appear automatically from turn 1, no opt-in needed).</summary>
     public static void EnsureActualTurnRegion(int turn)
     {
         if (turn <= 0 || !RunActive)
@@ -273,12 +307,25 @@ internal static class NotesRuntime
         }
         var document = ActiveDocument;
         var board = ActiveBoard;
-        if (board.WorldLines.Count == 0)
+        var line = document.EnsureActualWorldLine(board.Id);
+        document.EnsureTurnRegion(board.Id, line.Id, turn);
+        Raise();
+    }
+
+    /// <summary>Stores the end-of-turn state snapshot on the actual turn region.</summary>
+    public static void UpdateActualRegionSnapshot(int turn, string snapshot, int hp, int maxHp)
+    {
+        if (turn <= 0 || !RunActive)
         {
             return;
         }
+        var document = ActiveDocument;
+        var board = ActiveBoard;
         var line = document.EnsureActualWorldLine(board.Id);
-        document.EnsureTurnRegion(board.Id, line.Id, turn);
+        var region = document.EnsureTurnRegion(board.Id, line.Id, turn);
+        region.Snapshot = snapshot;
+        region.Hp = hp;
+        region.MaxHp = maxHp;
         Raise();
     }
 
@@ -312,8 +359,17 @@ internal static class NotesRuntime
 
     public static void NewWorldLine()
     {
+        var document = ActiveDocument;
         var board = ActiveBoard;
-        Commands.Execute(new AddWorldLineCommand(ActiveDocument, board.Id));
+        Commands.Execute(new AddWorldLineCommand(document, board.Id));
+        var line = board.WorldLines[^1];
+        // A brand-new line starts empty at turn 1; keep the current turn visible too.
+        document.EnsureTurnRegion(board.Id, line.Id, 1);
+        var turn = CurrentTurn;
+        if (turn > 1)
+        {
+            document.EnsureTurnRegion(board.Id, line.Id, turn);
+        }
         Raise();
     }
 
@@ -321,10 +377,6 @@ internal static class NotesRuntime
     public static void Import(bool currentTurnOnly)
     {
         var ops = NotesOpLog.Entries;
-        if (ops.Count == 0)
-        {
-            return;
-        }
         var document = ActiveDocument;
         var board = ActiveBoard;
         var line = document.EnsureActualWorldLine(board.Id);
@@ -342,6 +394,10 @@ internal static class NotesRuntime
         else
         {
             turns = ops.Where(o => o.Turn > 0).Select(o => o.Turn).Distinct().OrderBy(t => t).ToList();
+            if (turns.Count == 0)
+            {
+                turns = new List<int> { Math.Max(1, CurrentTurn) };
+            }
         }
 
         var commands = new List<INotesCommand>();
@@ -351,11 +407,23 @@ internal static class NotesRuntime
             var plan = NotesImporter.Plan(board, region, ops);
             commands.AddRange(plan.Nodes.Select(node => (INotesCommand)new AddNodeCommand(document, board.Id, node)));
             commands.AddRange(plan.Edges.Select(edge => (INotesCommand)new AddEdgeCommand(document, board.Id, edge)));
+            var last = ops
+                .Where(o => o.Turn == turn && o.Kind != NotesOpKind.TurnEvent)
+                .OrderBy(o => o.UnixMs)
+                .LastOrDefault();
+            if (last != null)
+            {
+                region.Snapshot = last.Snapshot;
+                region.Hp = last.Hp;
+                region.MaxHp = last.MaxHp;
+            }
         }
         if (commands.Count > 0)
         {
             Commands.Execute(new CompositeCommand(commands, "Import"));
         }
+        MegaCrit.Sts2.Core.Logging.Log.Info(
+            $"[Notes] import: turns={string.Join(",", turns)} ops={ops.Count} commands={commands.Count}");
         Raise();
     }
 

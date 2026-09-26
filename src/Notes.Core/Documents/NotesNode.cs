@@ -49,8 +49,18 @@ public sealed class NotesNode
     /// <summary>Op-log id this node was imported from; keeps imports idempotent.</summary>
     public string SourceOpId { get; set; } = "";
 
+    /// <summary>Capture timestamp (ms) for ordering stats; 0 = manual node.</summary>
+    public long OrderMs { get; set; }
+
     /// <summary>Extra payload, e.g. card names for a compressed draw node.</summary>
     public string Meta { get; set; } = "";
+
+    /// <summary>State snapshot at this step (inspector text); "" = none.</summary>
+    public string Snapshot { get; set; } = "";
+
+    public int Hp { get; set; } = -1;
+
+    public int MaxHp { get; set; } = -1;
 
     /// <summary>Auto-captured labels (relic triggers, effect draws/discards).</summary>
     public List<NotesAnnotation> Annotations { get; set; } = new();
@@ -73,7 +83,11 @@ public sealed class NotesNode
         RegionId = RegionId,
         NextSlotCount = NextSlotCount,
         SourceOpId = SourceOpId,
+        OrderMs = OrderMs,
         Meta = Meta,
+        Snapshot = Snapshot,
+        Hp = Hp,
+        MaxHp = MaxHp,
         Annotations = Annotations.Select(a => a.Clone()).ToList(),
     };
 
@@ -92,7 +106,11 @@ public sealed class NotesNode
         ColorHex = other.ColorHex;
         State = other.State;
         NextSlotCount = other.NextSlotCount;
+        OrderMs = other.OrderMs;
         Meta = other.Meta;
+        Snapshot = other.Snapshot;
+        Hp = other.Hp;
+        MaxHp = other.MaxHp;
         Annotations = other.Annotations.Select(a => a.Clone()).ToList();
         if (includePosition)
         {

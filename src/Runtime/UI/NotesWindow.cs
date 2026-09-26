@@ -1,4 +1,6 @@
 using Godot;
+using Notes.Core.Documents;
+using Notes.Core.Services;
 using Notes.Game;
 
 namespace Notes.UI;
@@ -14,6 +16,7 @@ public partial class NotesWindow : PanelContainer
     private Label _status = null!;
     private BoardCanvas _canvas = null!;
     private CardPalette _palette = null!;
+    private InspectorPanel _inspector = null!;
     private ConfirmationDialog _deleteConfirm = null!;
     private bool _updating;
 
@@ -100,7 +103,17 @@ public partial class NotesWindow : PanelContainer
         _palette.CardActivated += snapshot =>
             _canvas.AddCardNode(snapshot, _canvas.ViewCenterInBoardCoords()
                 - new Vector2(NodeControl.NodeWidth / 2f, NodeControl.NodeHeight / 2f));
-        body.AddChild(_palette);
+
+        var right = new VBoxContainer
+        {
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(292, 0),
+        };
+        right.AddThemeConstantOverride("separation", 6);
+        right.AddChild(_palette);
+        _inspector = new InspectorPanel();
+        right.AddChild(_inspector);
+        body.AddChild(right);
 
         _status = new Label { Text = ModLocalization.T("status_hint", "") };
         _status.AddThemeFontSizeOverride("font_size", 11);
@@ -121,13 +134,18 @@ public partial class NotesWindow : PanelContainer
 
         NotesRuntime.Changed += RefreshHeader;
         NotesRuntime.OpsChanged += RefreshHeader;
+        NotesRuntime.Changed += RefreshInspector;
+        NotesRuntime.SelectionChanged += RefreshInspector;
         RefreshHeader();
+        RefreshInspector();
     }
 
     public override void _ExitTree()
     {
         NotesRuntime.Changed -= RefreshHeader;
         NotesRuntime.OpsChanged -= RefreshHeader;
+        NotesRuntime.Changed -= RefreshInspector;
+        NotesRuntime.SelectionChanged -= RefreshInspector;
     }
 
     public void OnShown()
@@ -229,9 +247,147 @@ public partial class NotesWindow : PanelContainer
         }
     }
 
-    private void OnLibraryPressed()
+    private void RefreshInspector()
     {
-        NotesRuntime.FlushSave();
+        if (_inspector == null)
+        {
+            return;
+        }
+        try
+        {
+            var board = NotesRuntime.ActiveBoard;
+            switch (NotesRuntime.SelectionKind)
+            {
+                case NotesSelectionKind.Node:
+                {
+                    var node = board.FindNode(NotesRuntime.SelectionId);
+                    if (node == null)
+                    {
+                        _inspector.Show(ModLocalization.T("inspector_title", "Detail"),
+                            ModLocalization.T("inspector_none", "Select a step, turn region or world line"));
+                        return;
+                    }
+                    var lines = new List<string>
+                    {
+                        KindLabel(node.Kind) + " · " + node.Title + (node.Upgraded ? "+" : "")
+                            + "   " + StateLabel(node.State),
+                    };
+                    if (node.Kind == NodeKind.Card && node.Cost >= 0)
+                    {
+                        lines.Add(ModLocalization.T("inspector_cost", "Cost") + ": " + node.Cost);
+                    }
+                    if (node.Annotations.Count > 0)
+                    {
+                        lines.Add(ModLocalization.T("inspector_annotations", "Annotations") + ":");
+                        lines.AddRange(node.Annotations.Select(a => "• " + a.Text));
+                    }
+                    if (node.Snapshot.Length > 0)
+                    {
+                        lines.Add("");
+                        lines.Add(ModLocalization.T("inspector_state", "State at this step") + ":");
+                        lines.Add(node.Snapshot);
+                    }
+                    if (!string.IsNullOrWhiteSpace(node.Note))
+                    {
+                        lines.Add("");
+                        lines.Add(node.Note);
+                    }
+                    _inspector.Show(ModLocalization.T("inspector_node", "Step detail"), string.Join("\n", lines));
+                    break;
+                }
+                case NotesSelectionKind.Region:
+                {
+                    var region = board.FindRegion(NotesRuntime.SelectionId);
+                    if (region == null)
+                    {
+                        return;
+                    }
+                    var line = board.FindWorldLine(region.WorldLineId);
+                    var lines = new List<string>
+                    {
+                        ModLocalization.T("region_turn", "回合") + " " + region.TurnNumber
+                            + (line != null ? "  ·  " + line.Name : ""),
+                        ModLocalization.T("inspector_ops", "Ops") + ": " + board.NodesOfRegion(region.Id).Count(),
+                    };
+                    if (region.TurnEvents.Count > 0)
+                    {
+                        lines.Add(ModLocalization.T("inspector_turn_events", "Turn events") + ":");
+                        lines.AddRange(region.TurnEvents.Select(e => "• " + e.Text));
+                    }
+                    lines.Add("");
+                    lines.Add(ModLocalization.T("inspector_state_end", "State at end of turn") + ":");
+                    lines.Add(region.Snapshot.Length > 0
+                        ? region.Snapshot
+                        : ModLocalization.T("inspector_no_snapshot", "(no snapshot — import this turn first)"));
+                    _inspector.Show(ModLocalization.T("inspector_region", "Turn region"), string.Join("\n", lines));
+                    break;
+                }
+                case NotesSelectionKind.WorldLine:
+                {
+                    var line = board.FindWorldLine(NotesRuntime.SelectionId);
+                    if (line == null)
+                    {
+                        return;
+                    }
+                    var stats = NotesStats.Compute(board, line.Id);
+                    var lines = new List<string>
+                    {
+                        ModLocalization.T("inspector_turns", "Turns") + ": " + stats.TurnCount
+                            + "   " + ModLocalization.T("inspector_nodes", "Nodes") + ": " + stats.NodeCount,
+                        ModLocalization.T("inspector_branches", "Branches") + ": " + stats.BranchCount
+                            + "   " + ModLocalization.T("inspector_surviving", "Survived turn end") + ": " + stats.SurvivingBranches,
+                        ModLocalization.T("inspector_marks", "Marks") + ": ✔" + stats.TriedCount
+                            + " ?" + stats.SpeculatedCount + " ★" + stats.ConfirmedCount,
+                        ModLocalization.T("inspector_potions", "Potions used") + ": " + stats.PotionCount
+                            + (stats.Potions.Count > 0 ? " (" + string.Join(", ", stats.Potions) + ")" : ""),
+                        ModLocalization.T("inspector_damage", "Damage taken") + ": " + stats.DamageTaken,
+                    };
+                    if (stats.HpMin >= 0)
+                    {
+                        lines.Add(ModLocalization.T("inspector_hp_range", "HP range") + ": " + stats.HpMin + " ~ " + stats.HpMax);
+                    }
+                    if (board.WorldLines.Count > 0 && board.WorldLines[0].Id == line.Id
+                        && GameContext.LocalPlayer is { } player)
+                    {
+                        lines.Add(ModLocalization.T("inspector_live", "Live HP") + ": "
+                            + player.Creature.CurrentHp + "/" + player.Creature.MaxHp);
+                    }
+                    _inspector.Show(ModLocalization.T("inspector_world_line", "World line overview"), string.Join("\n", lines));
+                    break;
+                }
+                default:
+                    _inspector.Show(ModLocalization.T("inspector_title", "Detail"),
+                        ModLocalization.T("inspector_none", "Select a step, turn region or world line"));
+                    break;
+            }
+        }
+        catch
+        {
+            // inspector is informational only
+        }
+    }
+
+    private static string KindLabel(NodeKind kind) => kind switch
+    {
+        NodeKind.Card => ModLocalization.T("palette_tab_hand", "Card"),
+        NodeKind.Potion => ModLocalization.T("op_potion", "Potion"),
+        NodeKind.Relic => ModLocalization.T("op_relic", "Relic"),
+        NodeKind.Draw => ModLocalization.T("op_draw", "Draw"),
+        NodeKind.Discard => ModLocalization.T("op_discard", "Discard"),
+        NodeKind.EndTurn => ModLocalization.T("op_end_turn", "End turn"),
+        _ => ModLocalization.T("op_text", "Text"),
+    };
+
+    private static string StateLabel(NodeState state) => state switch
+    {
+        NodeState.Tried => ModLocalization.T("node_state_tried", "Tried"),
+        NodeState.Speculated => ModLocalization.T("node_state_speculated", "Speculated"),
+        NodeState.Confirmed => ModLocalization.T("node_state_confirmed", "Confirmed"),
+        _ => "",
+    };
+
+    private void OnLibraryPressed()
+    {        NotesRuntime.FlushSave();
         NotesRuntime.SetLibrary(NotesRuntime.Library == NotesLibrary.Run
             ? NotesLibrary.Global
             : NotesLibrary.Run);

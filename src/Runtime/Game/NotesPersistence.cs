@@ -1,6 +1,7 @@
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Runs;
 using Notes.Core.Documents;
+using STS2RitsuLib;
 using STS2RitsuLib.Data;
 using STS2RitsuLib.RunData;
 using STS2RitsuLib.Utils.Persistence;
@@ -42,18 +43,46 @@ internal static class NotesPersistence
         }
 
         RunManager.Instance.RunStarted += OnRunStarted;
+        // RunManager.RunStarted only fires for new runs; loaded saves need the
+        // RitsuLib lifecycle events (this was why capture/import stayed empty).
+        RitsuLibFramework.SubscribeLifecycle<RunStartedEvent>(e => OnRunStarted(e.RunState));
+        RitsuLibFramework.SubscribeLifecycle<RunLoadedEvent>(e => OnRunStarted(e.RunState));
+        RitsuLibFramework.SubscribeLifecycle<RunEndedEvent>(_ => OnRunEnded());
     }
 
     private static void OnRunStarted(RunState state)
     {
         try
         {
+            if (ReferenceEquals(GameContext.CurrentRun, state))
+            {
+                return;
+            }
             GameContext.CurrentRun = state;
+            Log.Info("[Notes] run context acquired");
             NotesRuntime.OnRunContextChanged();
         }
         catch (Exception ex)
         {
             Log.Error("[Notes] run-started handling failed: " + ex);
+        }
+    }
+
+    private static void OnRunEnded()
+    {
+        try
+        {
+            if (GameContext.CurrentRun == null)
+            {
+                return;
+            }
+            GameContext.CurrentRun = null;
+            Log.Info("[Notes] run context cleared");
+            NotesRuntime.OnRunContextChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] run-ended handling failed: " + ex);
         }
     }
 

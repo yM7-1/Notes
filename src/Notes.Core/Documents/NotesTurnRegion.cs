@@ -22,6 +22,13 @@ public sealed class NotesTurnRegion
     /// triggers, shuffles, ...).</summary>
     public List<NotesAnnotation> TurnEvents { get; set; } = new();
 
+    /// <summary>Player state at the end of this turn (inspector text).</summary>
+    public string Snapshot { get; set; } = "";
+
+    public int Hp { get; set; } = -1;
+
+    public int MaxHp { get; set; } = -1;
+
     public NotesTurnRegion Clone() => new()
     {
         Id = Id,
@@ -32,5 +39,8 @@ public sealed class NotesTurnRegion
         Width = Width,
         Height = Height,
         TurnEvents = TurnEvents.Select(a => a.Clone()).ToList(),
+        Snapshot = Snapshot,
+        Hp = Hp,
+        MaxHp = MaxHp,
     };
 }

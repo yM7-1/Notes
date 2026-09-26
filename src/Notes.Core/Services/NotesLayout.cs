@@ -62,9 +62,13 @@ public static class NotesLayout
             return (MinRegionWidth, MinRegionHeight);
         }
         var maxX = nodes.Max(n => n.X) + NodeWidth + RegionPadding;
-        var maxY = nodes.Max(n => n.Y) + NodeHeight + RegionPadding;
+        var maxY = nodes.Max(n => n.Y + NodeHeight + AnnotationHeight(n)) + RegionPadding;
         return (MathF.Max(MinRegionWidth, maxX), MathF.Max(MinRegionHeight, maxY));
     }
+
+    /// <summary>Extra room for the annotation chips drawn under a node.</summary>
+    private static float AnnotationHeight(NotesNode node) =>
+        node.Annotations.Count == 0 ? 0f : 6f + Math.Min(3, node.Annotations.Count) * 18f;
 
     private static void LayoutRegionNodes(NotesBoard board, NotesTurnRegion region, float originX, float originY)
     {

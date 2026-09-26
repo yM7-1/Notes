@@ -1,5 +1,6 @@
 using Godot;
 using Notes.Core.Documents;
+using Notes.Game;
 
 namespace Notes.UI;
 
@@ -97,12 +98,16 @@ public partial class NodeControl : Control
         var font = ThemeDB.FallbackFont;
         var kindColor = UiStyle.KindColor(_node.Kind, _node.CardType);
         var stateColor = UiStyle.StateColor(_node.State);
+        var selected = NotesRuntime.SelectionKind == NotesSelectionKind.Node
+            && NotesRuntime.SelectionId == _node.Id;
 
-        var border = _dragging || _hover
+        var border = selected
             ? UiStyle.Accent
-            : _node.State == NodeState.None
-                ? UiStyle.PanelBorder.Lerp(kindColor, 0.4f)
-                : stateColor;
+            : _dragging || _hover
+                ? UiStyle.Accent
+                : _node.State == NodeState.None
+                    ? UiStyle.PanelBorder.Lerp(kindColor, 0.4f)
+                    : stateColor;
         var background = _node.Kind == NodeKind.Text ? UiStyle.NodeBgText : UiStyle.NodeBg;
         if (_hover || _dragging)
         {
@@ -111,9 +116,13 @@ public partial class NodeControl : Control
 
         _box.BgColor = background;
         _box.BorderColor = border;
-        _box.SetBorderWidthAll(_node.State == NodeState.None && !_hover ? 1 : 2);
+        _box.SetBorderWidthAll(selected ? 3 : _node.State == NodeState.None && !_hover ? 1 : 2);
         _box.SetCornerRadiusAll(9);
         DrawStyleBox(_box, new Rect2(Vector2.Zero, Size));
+        if (selected)
+        {
+            DrawRect(new Rect2(-3, -3, Size.X + 6, Size.Y + 6), UiStyle.Accent, false, 1f);
+        }
 
         _bar.BgColor = kindColor;
         DrawStyleBox(_bar, new Rect2(8, 10, 4, Size.Y - 20));
@@ -246,6 +255,10 @@ public partial class NodeControl : Control
                     else if (_moved)
                     {
                         _canvas.CommitNodeMove(_node.Id, _startNodePosition, Position);
+                    }
+                    else
+                    {
+                        NotesRuntime.SelectNode(_node.Id);
                     }
                     AcceptEvent();
                 }

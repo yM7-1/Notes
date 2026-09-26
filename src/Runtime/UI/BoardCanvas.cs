@@ -119,12 +119,20 @@ public partial class BoardCanvas : Control
         AddChild(_editor);
 
         NotesRuntime.Changed += OnRuntimeChanged;
+        NotesRuntime.SelectionChanged += OnSelectionChanged;
         OnRuntimeChanged();
     }
 
     public override void _ExitTree()
     {
         NotesRuntime.Changed -= OnRuntimeChanged;
+        NotesRuntime.SelectionChanged -= OnSelectionChanged;
+    }
+
+    private void OnSelectionChanged()
+    {
+        _surface.QueueRedraw();
+        _surface.RefreshNodeDraw();
     }
 
     public override void _Notification(int what)
@@ -241,6 +249,18 @@ public partial class BoardCanvas : Control
                     _menuEdgeId = edgeId;
                     _edgeMenu.Popup(new Rect2I((Vector2I)GetGlobalMousePosition(), Vector2I.Zero));
                 }
+                else if (TryGetRegionAt(local, out var regionId))
+                {
+                    NotesRuntime.SelectRegion(regionId);
+                }
+                else if (TryGetWorldLineAt(local, out var worldLineId))
+                {
+                    NotesRuntime.SelectWorldLine(worldLineId);
+                }
+                else
+                {
+                    NotesRuntime.ClearSelection();
+                }
                 AcceptEvent();
             }
         }
@@ -336,9 +356,63 @@ public partial class BoardCanvas : Control
         }
 
         var surfaceLocal = (atPosition - _surface.Position) / _surface.Scale;
+
+        // Dropped inside a turn region but not on a slot: still belongs to that turn.
+        if (TryGetRegionAt(surfaceLocal, out var regionId))
+        {
+            var node = NotesRuntime.CreateCardNode(snapshot, surfaceLocal.X, surfaceLocal.Y);
+            node.RegionId = regionId;
+            node.State = speculated ? NodeState.Speculated : NodeState.None;
+            NotesRuntime.Commands.Execute(new AddNodeCommand(NotesRuntime.ActiveDocument, _board.Id, node));
+            NotesRuntime.Raise();
+            return;
+        }
+
         AddCardNode(snapshot,
             surfaceLocal - new Vector2(NodeControl.NodeWidth / 2f, NodeControl.NodeHeight / 2f),
             speculated);
+    }
+
+    private bool TryGetRegionAt(Vector2 surfacePosition, out string regionId)
+    {
+        regionId = "";
+        if (_board == null)
+        {
+            return false;
+        }
+        var region = _board.TurnRegions.FirstOrDefault(r =>
+            new Rect2(r.X, r.Y, r.Width, r.Height).HasPoint(surfacePosition));
+        if (region == null)
+        {
+            return false;
+        }
+        regionId = region.Id;
+        return true;
+    }
+
+    private bool TryGetWorldLineAt(Vector2 surfacePosition, out string worldLineId)
+    {
+        worldLineId = "";
+        if (_board == null)
+        {
+            return false;
+        }
+        foreach (var line in _board.WorldLines)
+        {
+            var regions = _board.RegionsOf(line.Id).ToList();
+            if (regions.Count == 0)
+            {
+                continue;
+            }
+            var first = regions[0];
+            var header = new Rect2(first.X - 8, first.Y - 48, 300, 40);
+            if (header.HasPoint(surfacePosition))
+            {
+                worldLineId = line.Id;
+                return true;
+            }
+        }
+        return false;
     }
 
     public void AddCardNode(CardSnapshot snapshot, Vector2 position, bool speculated = false)
