@@ -76,6 +76,85 @@ public sealed class NotesDocument
         return CreateBoard(name ?? "Overview", BoardKind.Overview);
     }
 
+    /// <summary>The read-only auto-recorded current world line (one per document).</summary>
+    public NotesBoard EnsureCurrentBoard(string name)
+    {
+        var existing = Boards.FirstOrDefault(b => b.Kind == BoardKind.Current);
+        if (existing != null)
+        {
+            return existing;
+        }
+        return CreateBoard(name, BoardKind.Current);
+    }
+
+    /// <summary>Deep-copies a board (regions, nodes, edges, annotations) into a
+    /// new interactive world-line board with fresh ids; positions and captured
+    /// snapshots are preserved. The copy becomes the active board.</summary>
+    public NotesBoard? DuplicateWorldLineBoard(string sourceBoardId, string newName)
+    {
+        var source = FindBoard(sourceBoardId);
+        if (source == null)
+        {
+            return null;
+        }
+        var target = CreateWorldLineBoard(newName);
+        var sourceLine = source.WorldLines.FirstOrDefault();
+        var targetLine = EnsureActualWorldLine(target.Id, newName);
+
+        var regionMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var region in source.TurnRegions.OrderBy(r => r.TurnNumber))
+        {
+            if (sourceLine != null && region.WorldLineId != sourceLine.Id)
+            {
+                continue;
+            }
+            var clone = new NotesTurnRegion
+            {
+                Id = IdFactory.NewRegionId(),
+                WorldLineId = targetLine.Id,
+                TurnNumber = region.TurnNumber,
+                TurnEvents = region.TurnEvents.Select(a => a.Clone()).ToList(),
+                Snapshot = region.Snapshot,
+                Hp = region.Hp,
+                MaxHp = region.MaxHp,
+            };
+            target.TurnRegions.Add(clone);
+            regionMap[region.Id] = clone.Id;
+        }
+
+        var nodeMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var node in source.Nodes)
+        {
+            var mappedRegion = "";
+            if (node.RegionId.Length > 0)
+            {
+                if (!regionMap.TryGetValue(node.RegionId, out mappedRegion!))
+                {
+                    continue; // belongs to another line of the source board
+                }
+            }
+            var clone = node.Clone();
+            clone.Id = IdFactory.NewNodeId();
+            clone.RegionId = mappedRegion;
+            target.Nodes.Add(clone);
+            nodeMap[node.Id] = clone.Id;
+        }
+        foreach (var edge in source.Edges)
+        {
+            if (nodeMap.TryGetValue(edge.From, out var from) && nodeMap.TryGetValue(edge.To, out var to))
+            {
+                target.Edges.Add(new NotesEdge
+                {
+                    Id = IdFactory.NewEdgeId(),
+                    From = from,
+                    To = to,
+                    Label = edge.Label,
+                });
+            }
+        }
+        return target;
+    }
+
     public int NextWorldLineOrdinal()
     {
         var max = 0;

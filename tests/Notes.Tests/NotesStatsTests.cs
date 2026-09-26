@@ -56,4 +56,26 @@ public class NotesStatsTests
         Assert.Equal(58, stats.HpMin);
         Assert.Equal(80, stats.HpMax);
     }
+
+    [Fact]
+    public void Compute_PrefersRegionEndOfTurnHp()
+    {
+        var document = new NotesDocument();
+        var board = document.CreateBoard("combat");
+        var line = document.EnsureActualWorldLine(board.Id);
+        var t1 = document.EnsureTurnRegion(board.Id, line.Id, 1);
+        var t2 = document.EnsureTurnRegion(board.Id, line.Id, 2);
+        var t3 = document.EnsureTurnRegion(board.Id, line.Id, 3);
+        t1.Hp = 80;
+        t2.Hp = 62; // 18 lost between turns (enemy turn damage)
+        t3.Hp = 70; // healed back up
+        // Node snapshots must be ignored when the region series is available.
+        board.Nodes.Add(new NotesNode { Id = "n", RegionId = t2.Id, Hp = 40 });
+
+        var stats = NotesStats.Compute(board, line.Id);
+
+        Assert.Equal(18, stats.DamageTaken);
+        Assert.Equal(62, stats.HpMin);
+        Assert.Equal(80, stats.HpMax);
+    }
 }

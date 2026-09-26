@@ -27,6 +27,17 @@ public static class NotesLayout
     public const float OverviewCardGapX = 24f;
     public const float OverviewCardGapY = 18f;
     public const int OverviewColumns = 3;
+    public const float BoundaryChipHeight = 18f;
+    public const float BoundaryChipGap = 3f;
+    public const float BoundaryStripPadding = 8f;
+
+    /// <summary>Height reserved below the nodes for boundary annotations so the
+    /// chips never overlap the node area (and are not covered by node controls).</summary>
+    public static float BoundaryAreaHeight(NotesTurnRegion region)
+    {
+        var count = region.TurnEvents.Count(e => NotesAnnotation.IsBoundaryRef(e.RefId));
+        return count == 0 ? 0f : BoundaryStripPadding + count * (BoundaryChipHeight + BoundaryChipGap);
+    }
 
     public static void Apply(NotesBoard board)
     {
@@ -64,10 +75,10 @@ public static class NotesLayout
         var nodes = board.NodesOfRegion(region.Id).ToList();
         if (nodes.Count == 0)
         {
-            return (MinRegionWidth, MinRegionHeight);
+            return (MinRegionWidth, MinRegionHeight + BoundaryAreaHeight(region));
         }
         var maxX = nodes.Max(n => n.X) + NodeWidth + RegionPadding;
-        var maxY = nodes.Max(n => n.Y) + NodeHeight + RegionPadding;
+        var maxY = nodes.Max(n => n.Y) + NodeHeight + RegionPadding + BoundaryAreaHeight(region);
         return (MathF.Max(MinRegionWidth, maxX), MathF.Max(MinRegionHeight, maxY));
     }
 
@@ -159,12 +170,21 @@ public static class NotesLayout
         return node.Y;
     }
 
-    /// <summary>Overview-board cards: one per world-line board, in a grid.</summary>
+    /// <summary>Overview-board cards: the read-only current line first, then one
+    /// card per interactive world-line board, in a grid.</summary>
     public static List<OverviewCard> OverviewCards(NotesDocument document)
     {
+        var boards = new List<NotesBoard>();
+        var current = document.Boards.FirstOrDefault(b => b.Kind == BoardKind.Current);
+        if (current != null)
+        {
+            boards.Add(current);
+        }
+        boards.AddRange(document.WorldLineBoards);
+
         var cards = new List<OverviewCard>();
         var index = 0;
-        foreach (var board in document.WorldLineBoards)
+        foreach (var board in boards)
         {
             var column = index % OverviewColumns;
             var row = index / OverviewColumns;

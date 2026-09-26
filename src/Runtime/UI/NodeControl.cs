@@ -27,16 +27,21 @@ public partial class NodeControl : Control
 
     public string NodeId => _node.Id;
 
-    public void Setup(BoardCanvas canvas, NotesNode node)
+    /// <summary>View-only node (read-only current world line): click selects,
+    /// nothing can be dragged, linked or edited.</summary>
+    public bool ReadOnly { get; set; }
+
+    public void Setup(BoardCanvas canvas, NotesNode node, bool readOnly = false)
     {
         _canvas = canvas;
         _node = node;
+        ReadOnly = readOnly;
         CustomMinimumSize = new Vector2(NodeWidth, NodeHeight);
         Size = new Vector2(NodeWidth, NodeHeight);
         Position = new Vector2(node.X, node.Y);
         MouseFilter = MouseFilterEnum.Stop;
         FocusMode = FocusModeEnum.None;
-        MouseDefaultCursorShape = CursorShape.Move;
+        MouseDefaultCursorShape = ReadOnly ? CursorShape.PointingHand : CursorShape.Move;
 
         _box = new StyleBoxFlat();
         _bar = new StyleBoxFlat();
@@ -191,12 +196,26 @@ public partial class NodeControl : Control
                 HorizontalAlignment.Left, -1, 10, accent);
         }
 
-        DrawCircle(PortOffset, _hoverPort ? 8f : 6f, UiStyle.BadgeBg);
-        DrawCircle(PortOffset, _hoverPort ? 6.5f : 5f, _hoverPort ? UiStyle.Accent : kindColor);
+        if (!ReadOnly)
+        {
+            DrawCircle(PortOffset, _hoverPort ? 8f : 6f, UiStyle.BadgeBg);
+            DrawCircle(PortOffset, _hoverPort ? 6.5f : 5f, _hoverPort ? UiStyle.Accent : kindColor);
+        }
     }
 
     public override void _GuiInput(InputEvent @event)
     {
+        if (ReadOnly)
+        {
+            if (@event is InputEventMouseButton roButton
+                && roButton.ButtonIndex == MouseButton.Left
+                && roButton.Pressed)
+            {
+                NotesRuntime.SelectNode(_node.Id);
+                AcceptEvent();
+            }
+            return;
+        }
         if (@event is InputEventMouseButton button)
         {
             if (button.ButtonIndex == MouseButton.Left && button.Pressed)

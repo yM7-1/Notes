@@ -81,11 +81,12 @@ public partial class NotesLayer : CanvasLayer
         _quickRow.AddChild(recordTurn);
         var recordCombat = new Button
         {
-            Text = ModLocalization.T("quick_record_combat", "Combat → new line"),
-            TooltipText = ModLocalization.T("quick_record_combat_tip", "Record the whole combat into a new world-line board"),
+            Text = ModLocalization.T("quick_copy_line", "Copy → new line"),
+            TooltipText = ModLocalization.T("quick_copy_line_tip",
+                "把当前世界线复制成可交互的世界线画板（录入/更改/预测）"),
         };
         UiStyle.StyleButton(recordCombat, fontSize: 11);
-        recordCombat.Pressed += () => NotesRuntime.Import(currentTurnOnly: false);
+        recordCombat.Pressed += () => NotesRuntime.CopyCurrentToNewLine();
         _quickRow.AddChild(recordCombat);
 
         _window = new NotesWindow { Name = "NotesWindow" };

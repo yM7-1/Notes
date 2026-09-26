@@ -72,7 +72,10 @@ public partial class BoardCanvas : Control
     public override void _Draw()
     {
         DrawRect(new Rect2(Vector2.Zero, Size), _backdrop, true);
-        DrawTrash();
+        if (_board?.IsReadOnly != true)
+        {
+            DrawTrash();
+        }
     }
 
     private void DrawTrash()
@@ -258,6 +261,11 @@ public partial class BoardCanvas : Control
             }
             else if (button.Pressed && button.ButtonIndex == MouseButton.Right)
             {
+                if (_board.IsReadOnly)
+                {
+                    AcceptEvent();
+                    return;
+                }
                 var surfacePosition = _surface.GetLocalMousePosition();
                 var region = _board.TurnRegions.FirstOrDefault(r =>
                     new Rect2(r.X, r.Y, r.Width, r.Height).HasPoint(surfacePosition));
@@ -342,6 +350,10 @@ public partial class BoardCanvas : Control
 
     public override bool _CanDropData(Vector2 atPosition, Variant data)
     {
+        if (_board?.IsReadOnly == true)
+        {
+            return false;
+        }
         if (data.VariantType != Variant.Type.Dictionary)
         {
             return false;
@@ -360,7 +372,7 @@ public partial class BoardCanvas : Control
     {
         _dragActive = false;
         QueueRedraw();
-        if (_board == null)
+        if (_board == null || _board.IsReadOnly)
         {
             return;
         }
@@ -485,7 +497,7 @@ public partial class BoardCanvas : Control
 
     public void AddCardNode(CardSnapshot snapshot, Vector2 position, bool speculated = false)
     {
-        if (_board == null)
+        if (_board == null || _board.IsReadOnly)
         {
             return;
         }
@@ -497,7 +509,7 @@ public partial class BoardCanvas : Control
 
     public void AddTextNode(Vector2 position)
     {
-        if (_board == null)
+        if (_board == null || _board.IsReadOnly)
         {
             return;
         }
@@ -697,8 +709,8 @@ public partial class BoardCanvas : Control
     /// <summary>Enables click-to-link mode (click source, then click target).</summary>
     public void SetLinkMode(bool enabled)
     {
-        _linkMode = enabled;
-        if (!enabled)
+        _linkMode = enabled && _board?.IsReadOnly != true;
+        if (!_linkMode)
         {
             _linkFrom = null;
         }

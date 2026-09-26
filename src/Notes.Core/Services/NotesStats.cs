@@ -79,6 +79,29 @@ public static class NotesStats
         stats.BranchCount = Math.Max(1, leaves.Count);
         stats.SurvivingBranches = leaves.Count(n => n.Kind == NodeKind.EndTurn);
 
+        // Prefer the end-of-turn HP series of the regions: it captures damage
+        // between turns (enemy turn) and does not depend on nodes being imported.
+        var regionHp = regions
+            .Where(r => r.Hp > 0)
+            .OrderBy(r => r.TurnNumber)
+            .Select(r => r.Hp)
+            .ToList();
+        if (regionHp.Count >= 2)
+        {
+            var regionPrevious = -1;
+            foreach (var hp in regionHp)
+            {
+                if (regionPrevious > 0 && hp < regionPrevious)
+                {
+                    stats.DamageTaken += regionPrevious - hp;
+                }
+                regionPrevious = hp;
+                stats.HpMin = stats.HpMin < 0 ? hp : Math.Min(stats.HpMin, hp);
+                stats.HpMax = stats.HpMax < 0 ? hp : Math.Max(stats.HpMax, hp);
+            }
+            return stats;
+        }
+
         var ordered = nodes
             .Where(n => n.Hp > 0)
             .OrderBy(n => n.OrderMs)

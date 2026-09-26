@@ -100,7 +100,7 @@ public partial class CanvasSurface : Control
     private void AddNodeControl(NotesNode node)
     {
         var control = new NodeControl { Name = "Node_" + node.Id };
-        control.Setup(_canvas, node);
+        control.Setup(_canvas, node, _board?.IsReadOnly ?? false);
         AddChild(control);
         _nodes[node.Id] = control;
     }
@@ -231,7 +231,7 @@ public partial class CanvasSurface : Control
         var document = NotesRuntime.ActiveDocument;
         var font = ThemeDB.FallbackFont;
         var mouse = GetLocalMousePosition();
-        var actualBoardId = document.ActualWorldLineBoard?.Id ?? "";
+        var currentBoardId = document.Boards.FirstOrDefault(b => b.Kind == BoardKind.Current)?.Id ?? "";
 
         DrawString(font, new Vector2(NotesLayout.ColumnStartX, NotesLayout.RowStartY - 26),
             ModLocalization.T("overview_title", "世界线总览"), HorizontalAlignment.Left, -1, 16, UiStyle.Accent);
@@ -248,7 +248,7 @@ public partial class CanvasSurface : Control
             }
             var rect = new Rect2(card.X, card.Y, card.Width, card.Height);
             var hovered = rect.HasPoint(mouse);
-            var isActual = board.Id == actualBoardId;
+            var isActual = board.Id == currentBoardId;
             var border = hovered
                 ? UiStyle.Accent
                 : isActual
@@ -257,7 +257,7 @@ public partial class CanvasSurface : Control
             DrawRect(rect, Color.FromHtml("1e222bd9"), true);
             DrawRect(rect, border, false, hovered ? 2.5f : 1.5f);
 
-            var title = board.Name + (isActual ? "  ·  " + ModLocalization.T("overview_actual", "实际") : "");
+            var title = board.Name + (isActual ? "  ·  " + ModLocalization.T("overview_current", "当前") : "");
             DrawString(font, rect.Position + new Vector2(14, 28), title, HorizontalAlignment.Left, -1, 15,
                 hovered ? UiStyle.Accent : UiStyle.TextMain);
 
@@ -364,26 +364,35 @@ public partial class CanvasSurface : Control
                 UiStyle.KindColor(NodeKind.Relic, -1));
         }
 
-        // Boundary annotations (enemy insertions, unattributed exhausts) sit on
-        // the bottom edge, i.e. between this turn and the next one.
+        // Boundary annotations (enemy insertions, unattributed exhausts / discards,
+        // damage taken between turns) live in the strip reserved below the nodes,
+        // so node controls can never cover them.
         var boundary = region.TurnEvents.Where(e => UiStyle.IsBoundaryAnnotation(e.RefId)).ToList();
-        for (var i = 0; i < boundary.Count; i++)
+        if (boundary.Count > 0)
         {
-            var annotation = boundary[i];
-            var accent = UiStyle.AnnotationColor(annotation.RefId);
-            var maxWidth = MathF.Max(80f, region.Width - 20f);
-            var text = UiStyle.Ellipsize(UiStyle.AnnotationText(annotation), font, 10, maxWidth - 12);
-            var size = font.GetStringSize(text, HorizontalAlignment.Left, -1, 10);
-            var width = size.X + 12;
-            var box = new Rect2(
-                region.X + (region.Width - width) / 2f,
-                region.Y + region.Height - 9f - i * 19f,
-                width,
-                18);
-            _labelBox.BgColor = UiStyle.BadgeBg;
-            _labelBox.BorderColor = accent;
-            DrawStyleBox(_labelBox, box);
-            DrawString(font, box.Position + new Vector2(6, 13), text, HorizontalAlignment.Left, -1, 10, accent);
+            var stripTop = region.Y + region.Height - NotesLayout.BoundaryAreaHeight(region);
+            DrawLine(
+                new Vector2(region.X + 10, stripTop),
+                new Vector2(region.X + region.Width - 10, stripTop),
+                color.Lerp(UiStyle.PanelBorder, 0.55f), 1f);
+            for (var i = 0; i < boundary.Count; i++)
+            {
+                var annotation = boundary[i];
+                var accent = UiStyle.AnnotationColor(annotation.RefId);
+                var maxWidth = MathF.Max(80f, region.Width - 20f);
+                var text = UiStyle.Ellipsize(UiStyle.AnnotationText(annotation), font, 10, maxWidth - 12);
+                var size = font.GetStringSize(text, HorizontalAlignment.Left, -1, 10);
+                var width = size.X + 12;
+                var box = new Rect2(
+                    region.X + (region.Width - width) / 2f,
+                    stripTop + NotesLayout.BoundaryStripPadding + i * (NotesLayout.BoundaryChipHeight + NotesLayout.BoundaryChipGap),
+                    width,
+                    NotesLayout.BoundaryChipHeight);
+                _labelBox.BgColor = UiStyle.BadgeBg;
+                _labelBox.BorderColor = accent;
+                DrawStyleBox(_labelBox, box);
+                DrawString(font, box.Position + new Vector2(6, 13), text, HorizontalAlignment.Left, -1, 10, accent);
+            }
         }
     }
 

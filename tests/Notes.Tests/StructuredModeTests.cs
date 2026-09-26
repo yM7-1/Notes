@@ -189,6 +189,108 @@ public class StructuredModeTests
     }
 
     [Fact]
+    public void OverviewCards_IncludeCurrentBoardFirst()
+    {
+        var document = new NotesDocument();
+        document.EnsureOverviewBoard("Overview");
+        var current = document.EnsureCurrentBoard("Current");
+        var worldLine = document.CreateWorldLineBoard("World line 1");
+
+        var cards = NotesLayout.OverviewCards(document);
+
+        Assert.Equal(2, cards.Count);
+        Assert.Equal(current.Id, cards[0].BoardId);
+        Assert.Equal(worldLine.Id, cards[1].BoardId);
+    }
+
+    [Fact]
+    public void DuplicateWorldLineBoard_RemapsIdsAndKeepsContent()
+    {
+        var document = new NotesDocument();
+        document.EnsureOverviewBoard("Overview");
+        var current = document.EnsureCurrentBoard("Current");
+        var line = document.EnsureActualWorldLine(current.Id, current.Name);
+        var region = document.EnsureTurnRegion(current.Id, line.Id, 1);
+        region.Hp = 61;
+        region.TurnEvents.Add(new NotesAnnotation { RefId = "loss:", Count = 12 });
+        document.AddNode(current.Id, new NotesNode
+        {
+            Id = "n1",
+            RegionId = region.Id,
+            Title = "Strike",
+            SourceOpId = "op1",
+            Annotations = { new NotesAnnotation { RefId = "exhaust:", Text = "A" } },
+        });
+        document.AddNode(current.Id, new NotesNode { Id = "n2", RegionId = region.Id, Title = "Defend" });
+        document.AddEdge(current.Id, new NotesEdge { Id = "e1", From = "n1", To = "n2", Label = "if" });
+
+        var copy = document.DuplicateWorldLineBoard(current.Id, "World line 1");
+
+        Assert.NotNull(copy);
+        Assert.Equal(BoardKind.WorldLine, copy!.Kind);
+        Assert.Equal(1, copy.Ordinal);
+        Assert.Single(copy.TurnRegions);
+        Assert.Equal(2, copy.Nodes.Count);
+        Assert.DoesNotContain(copy.Nodes, n => n.Id == "n1" || n.Id == "n2");
+        Assert.Single(copy.Edges);
+        var copiedEdge = copy.Edges[0];
+        Assert.Equal("if", copiedEdge.Label);
+        Assert.Contains(copy.Nodes, n => n.Id == copiedEdge.From);
+        Assert.Contains(copy.Nodes, n => n.Id == copiedEdge.To);
+        var copiedRegion = copy.TurnRegions[0];
+        Assert.Equal(61, copiedRegion.Hp);
+        Assert.Contains(copiedRegion.TurnEvents, a => a.RefId == "loss:" && a.Count == 12);
+        var copiedNode = copy.Nodes.First(n => n.SourceOpId == "op1");
+        Assert.Equal("Strike", copiedNode.Title);
+        Assert.Equal(copiedRegion.Id, copiedNode.RegionId);
+        Assert.Contains(copiedNode.Annotations, a => a.RefId == "exhaust:");
+    }
+
+    [Fact]
+    public void Importer_Apply_KeepsNodeIdsAndRefreshesContent()
+    {
+        var (doc, board, line) = NewStructured();
+        var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
+        var ops = new List<NotesOpData>
+        {
+            new() { Id = "op1", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 1, Title = "Strike", Hp = 80 },
+        };
+        NotesImporter.Apply(doc, board, region, ops);
+        var firstId = Assert.Single(board.NodesOfRegion(region.Id)).Id;
+
+        ops[0].Title = "Strike+";
+        ops[0].Hp = 74;
+        ops[0].Annotations.Add(new NotesAnnotation { RefId = "damage:x", Text = "x", Count = 6 });
+        NotesImporter.Apply(doc, board, region, ops);
+
+        var again = Assert.Single(board.NodesOfRegion(region.Id));
+        Assert.Equal(firstId, again.Id);
+        Assert.Equal("Strike+", again.Title);
+        Assert.Equal(74, again.Hp);
+        Assert.Single(again.Annotations);
+        Assert.Equal(74, region.Hp);
+    }
+
+    [Fact]
+    public void Layout_ReservesStripForBoundaryAnnotations()
+    {
+        var (doc, board, line) = NewStructured();
+        var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
+        doc.AddNode(board.Id, new NotesNode { Id = "n", RegionId = region.Id });
+        NotesLayout.Apply(board);
+        var plainHeight = region.Height;
+
+        region.TurnEvents.Add(new NotesAnnotation { RefId = "loss:", Count = 5 });
+        region.TurnEvents.Add(new NotesAnnotation { RefId = "insert:x", Text = "A" });
+        NotesLayout.Apply(board);
+
+        Assert.True(region.Height > plainHeight);
+        Assert.Equal(
+            NotesLayout.BoundaryStripPadding + 2 * (NotesLayout.BoundaryChipHeight + NotesLayout.BoundaryChipGap),
+            NotesLayout.BoundaryAreaHeight(region), 3);
+    }
+
+    [Fact]
     public void ImportCommands_ReplaceKeepsManualNodesAndOverwritesImported()
     {
         var (doc, board, line) = NewStructured();

@@ -17,6 +17,8 @@ public partial class NotesWindow : Control
     private Button _linkButton = null!;
     private Button _undoButton = null!;
     private Button _redoButton = null!;
+    private Button _textButton = null!;
+    private Button _deleteBoardButton = null!;
     private Label _status = null!;
     private BoardCanvas _canvas = null!;
     private CardPalette _palette = null!;
@@ -93,11 +95,13 @@ public partial class NotesWindow : Control
         header.AddChild(_boardPicker);
 
         header.AddChild(MakeButton(ModLocalization.T("board_new", "+ Board"), () => NotesRuntime.NewBoard()));
-        header.AddChild(MakeButton(ModLocalization.T("board_delete", "Del Board"), ShowDeleteBoard));
+        _deleteBoardButton = MakeButton(ModLocalization.T("board_delete", "Del Board"), ShowDeleteBoard);
+        header.AddChild(_deleteBoardButton);
         header.AddChild(MakeButton(ModLocalization.T("world_line_new", "+ World line"), () => NotesRuntime.NewWorldLine()));
-        header.AddChild(MakeButton(ModLocalization.T("add_text", "+ Text"), AddTextHere));
+        _textButton = MakeButton(ModLocalization.T("add_text", "+ Text"), AddTextHere);
+        header.AddChild(_textButton);
         header.AddChild(MakeButton(ModLocalization.T("import_turn", "Record turn"), () => NotesRuntime.Import(currentTurnOnly: true)));
-        header.AddChild(MakeButton(ModLocalization.T("import_all", "Record combat"), () => NotesRuntime.Import(currentTurnOnly: false)));
+        header.AddChild(MakeButton(ModLocalization.T("copy_current_line", "Copy → new line"), () => NotesRuntime.CopyCurrentToNewLine()));
         header.AddChild(MakeButton(ModLocalization.T("ops_clear", "Clear log"), () => NotesRuntime.ClearOps()));
 
         _linkButton = new Button
@@ -262,6 +266,10 @@ public partial class NotesWindow : Control
         var ctrl = key.CtrlPressed || key.MetaPressed;
         if (ctrl && key.Keycode == Key.Z)
         {
+            if (NotesRuntime.ActiveBoard.IsReadOnly)
+            {
+                return;
+            }
             if (key.ShiftPressed)
             {
                 NotesRuntime.Commands.Redo();
@@ -275,6 +283,10 @@ public partial class NotesWindow : Control
         }
         else if (ctrl && key.Keycode == Key.Y)
         {
+            if (NotesRuntime.ActiveBoard.IsReadOnly)
+            {
+                return;
+            }
             NotesRuntime.Commands.Redo();
             NotesRuntime.Raise();
             GetViewport().SetInputAsHandled();
@@ -310,14 +322,28 @@ public partial class NotesWindow : Control
             }
             _boardPicker.Selected = selected;
 
-            _undoButton.Disabled = !NotesRuntime.Commands.CanUndo;
-            _redoButton.Disabled = !NotesRuntime.Commands.CanRedo;
+            var readOnly = active?.IsReadOnly ?? false;
+            var systemBoard = active?.Kind is BoardKind.Overview or BoardKind.Current;
+            _undoButton.Disabled = readOnly || !NotesRuntime.Commands.CanUndo;
+            _redoButton.Disabled = readOnly || !NotesRuntime.Commands.CanRedo;
+            _textButton.Disabled = readOnly;
+            _deleteBoardButton.Disabled = systemBoard;
+            _linkButton.Disabled = readOnly;
+            if (readOnly && _linkButton.ButtonPressed)
+            {
+                _linkButton.ButtonPressed = false;
+            }
 
             var combat = GameContext.InCombat
                 ? ModLocalization.T("status_combat", "In combat")
                 : ModLocalization.T("status_no_combat", "Not in combat");
             string hint;
-            if (_canvas.LinkMode)
+            if (readOnly)
+            {
+                hint = ModLocalization.T("status_readonly",
+                    "当前世界线为自动记录（只读）：用「复制→新世界线」创建可交互画板");
+            }
+            else if (_canvas.LinkMode)
             {
                 hint = _canvas.IsLinking
                     ? ModLocalization.T("status_link_source", "Pick a target to finish the branch (Esc to exit)")

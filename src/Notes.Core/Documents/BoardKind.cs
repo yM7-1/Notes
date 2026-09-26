@@ -8,4 +8,8 @@ public enum BoardKind
     Free = 0,
     Overview = 1,
     WorldLine = 2,
+
+    /// <summary>Read-only board auto-recorded from the live operation log; a
+    /// snapshot of it can be copied into an interactive world-line board.</summary>
+    Current = 3,
 }

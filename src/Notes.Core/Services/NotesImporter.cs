@@ -107,6 +107,77 @@ public static class NotesImporter
         return commands;
     }
 
+    /// <summary>Rebuilds one turn region in place (no command stack), keeping the
+    /// ids of nodes that are already there (stable UI while it refreshes). Used
+    /// by the read-only current-world-line board, derived from the op log.</summary>
+    public static int Apply(
+        NotesDocument document,
+        NotesBoard board,
+        NotesTurnRegion region,
+        IReadOnlyList<NotesOpData> ops)
+    {
+        var existingByOp = board.NodesOfRegion(region.Id)
+            .Where(n => n.SourceOpId.Length > 0)
+            .ToDictionary(n => n.SourceOpId, StringComparer.Ordinal);
+        var plan = Plan(board, region, ops, replaceImported: true);
+        var idMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        var planOps = new HashSet<string>(StringComparer.Ordinal);
+        var changed = 0;
+        foreach (var node in plan.Nodes)
+        {
+            planOps.Add(node.SourceOpId);
+            if (existingByOp.TryGetValue(node.SourceOpId, out var existing))
+            {
+                existing.CopyFrom(node, includePosition: false);
+                idMap[node.Id] = existing.Id;
+            }
+            else
+            {
+                if (document.AddNode(board.Id, node))
+                {
+                    changed++;
+                }
+                idMap[node.Id] = node.Id;
+            }
+        }
+        foreach (var stale in existingByOp.Values.Where(n => !planOps.Contains(n.SourceOpId)).ToList())
+        {
+            document.RemoveNode(board.Id, stale.Id);
+            changed++;
+        }
+
+        var importedIds = existingByOp.Values.Select(n => n.Id)
+            .Concat(idMap.Values)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var edge in board.EdgesOfRegion(region.Id)
+            .Where(e => importedIds.Contains(e.From) || importedIds.Contains(e.To))
+            .ToList())
+        {
+            document.RemoveEdge(board.Id, edge.Id);
+        }
+        foreach (var edge in plan.Edges)
+        {
+            var from = idMap.TryGetValue(edge.From, out var mappedFrom) ? mappedFrom : edge.From;
+            var to = idMap.TryGetValue(edge.To, out var mappedTo) ? mappedTo : edge.To;
+            document.AddEdge(board.Id, new NotesEdge { Id = IdFactory.NewEdgeId(), From = from, To = to });
+        }
+
+        var last = ops
+            .Where(o => o.Turn == region.TurnNumber
+                && o.Kind != NotesOpKind.TurnEvent
+                && o.Kind != NotesOpKind.Exhaust
+                && o.Kind != NotesOpKind.Discard)
+            .OrderBy(o => o.UnixMs)
+            .LastOrDefault();
+        if (last != null)
+        {
+            region.Snapshot = last.Snapshot;
+            region.Hp = last.Hp;
+            region.MaxHp = last.MaxHp;
+        }
+        return changed;
+    }
+
     /// <summary>Tail among manually placed nodes only (used when imported nodes
     /// are about to be replaced).</summary>
     private static string? FindManualTailId(NotesBoard board, NotesTurnRegion region)

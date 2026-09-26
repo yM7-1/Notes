@@ -16,5 +16,14 @@ public sealed class NotesAnnotation
     /// <summary>Aggregated amount: inserted copies, total damage.</summary>
     public int Count { get; set; } = 1;
 
+    /// <summary>Annotations that belong on the strip between two turn regions:
+    /// unattributed exhausts / discards, enemy card insertions, damage taken
+    /// during the enemy turn.</summary>
+    public static bool IsBoundaryRef(string refId) =>
+        refId.StartsWith("exhaust:", StringComparison.Ordinal)
+        || refId.StartsWith("discard:", StringComparison.Ordinal)
+        || refId.StartsWith("insert:", StringComparison.Ordinal)
+        || refId.StartsWith("loss:", StringComparison.Ordinal);
+
     public NotesAnnotation Clone() => new() { Text = Text, RefId = RefId, Meta = Meta, Count = Count };
 }

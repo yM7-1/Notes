@@ -371,17 +371,27 @@ internal static class NotesOpLog
     // ---- shared handling ------------------------------------------------------
 
     /// <summary>CombatHistory.DamageReceived: records who the player's operation
-    /// hit and for how much ("「打击」对 火炬头 造成 6 点伤害并击杀").</summary>
+    /// hit and for how much ("「打击」对 火炬头 造成 6 点伤害并击杀"), and how much
+    /// the player lost during the enemy turn ("战损 12").</summary>
     public static void OnDamage(Creature receiver, Creature? dealer, DamageResult result, CardModel? cardSource)
     {
         try
         {
             var player = GameContext.LocalPlayer;
-            if (player == null || dealer == null || !ReferenceEquals(dealer, player.Creature))
+            if (player == null || receiver == null)
             {
                 return;
             }
-            if (receiver == null || receiver.IsPlayer || receiver.Side == CombatSide.Player)
+            if (ReferenceEquals(receiver, player.Creature))
+            {
+                RecordLoss(result);
+                return;
+            }
+            if (dealer == null || !ReferenceEquals(dealer, player.Creature))
+            {
+                return;
+            }
+            if (receiver.IsPlayer || receiver.Side == CombatSide.Player)
             {
                 return;
             }
@@ -419,6 +429,27 @@ internal static class NotesOpLog
         {
             Log.Error("[Notes] damage capture failed: " + ex);
         }
+    }
+
+    /// <summary>HP actually lost while the enemy side is acting: accumulated into
+    /// one "战损 N" boundary annotation of the player turn that just ended.</summary>
+    private static void RecordLoss(DamageResult result)
+    {
+        var amount = result.UnblockedDamage;
+        if (amount <= 0)
+        {
+            return;
+        }
+        var side = GameContext.LocalPlayer?.Creature?.CombatState?.CurrentSide;
+        if (side != CombatSide.Enemy)
+        {
+            return;
+        }
+        NotesRuntime.MergeTurnEvent(_turn, new NotesAnnotation
+        {
+            RefId = "loss:",
+            Count = amount,
+        });
     }
 
     /// <summary>CombatHistory.CardGenerated: cards generated with no player

@@ -222,15 +222,16 @@ internal static class UiStyle
                 : annotation.Text;
             return Format("annot_insert", "【{0}】将【{1}】加入到【{2}】", enemy, card, PileLabel(pileKey));
         }
+        if (refId.StartsWith("loss:", StringComparison.Ordinal))
+        {
+            return Format("annot_loss", "战损 {0}", annotation.Count);
+        }
         return annotation.Text;
     }
 
-    /// <summary>Annotations that belong on the boundary between two turn
-    /// regions (enemy insertions, unattributed exhausts / discards).</summary>
-    public static bool IsBoundaryAnnotation(string refId) =>
-        refId.StartsWith("exhaust:", StringComparison.Ordinal)
-        || refId.StartsWith("discard:", StringComparison.Ordinal)
-        || refId.StartsWith("insert:", StringComparison.Ordinal);
+    /// <summary>Annotations that belong on the boundary strip between two turn
+    /// regions (enemy insertions, unattributed exhausts / discards, loss).</summary>
+    public static bool IsBoundaryAnnotation(string refId) => NotesAnnotation.IsBoundaryRef(refId);
 
     /// <summary>Accent color for an annotation chip / badge.</summary>
     public static Color AnnotationColor(string refId)
@@ -250,6 +251,10 @@ internal static class UiStyle
         if (refId.StartsWith("insert:", StringComparison.Ordinal))
         {
             return Color.FromHtml("cf6f9a");
+        }
+        if (refId.StartsWith("loss:", StringComparison.Ordinal))
+        {
+            return Color.FromHtml("e06c5f");
         }
         if (refId.StartsWith("damage:", StringComparison.Ordinal))
         {

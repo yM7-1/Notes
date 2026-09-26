@@ -14,6 +14,9 @@ public sealed class NotesBoard
     /// boards (the board is named "世界线N" / "World line N").</summary>
     public int Ordinal { get; set; }
 
+    /// <summary>The auto-recorded current world line is view-only.</summary>
+    public bool IsReadOnly => Kind == BoardKind.Current;
+
     public List<NotesNode> Nodes { get; set; } = new();
 
     public List<NotesEdge> Edges { get; set; } = new();
