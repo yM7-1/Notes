@@ -274,7 +274,11 @@ internal static class NotesOpLog
         }
         lock (Gate)
         {
-            _drawBatch ??= NewOp(NotesOpKind.Draw, ModLocalization.T("op_draw", "抽牌"));
+            if (_drawBatch == null)
+            {
+                _drawBatch = NewOp(NotesOpKind.Draw, ModLocalization.T("op_draw", "抽牌"));
+                Ops.Add(_drawBatch);
+            }
             _drawCount++;
             _drawBatch.Meta = string.IsNullOrEmpty(_drawBatch.Meta) ? name : _drawBatch.Meta + ", " + name;
             _drawBatch.Title = ModLocalization.T("op_draw", "抽牌") + "×" + _drawCount;
@@ -291,7 +295,11 @@ internal static class NotesOpLog
         }
         lock (Gate)
         {
-            _discardBatch ??= NewOp(NotesOpKind.Discard, ModLocalization.T("op_discard", "弃牌"));
+            if (_discardBatch == null)
+            {
+                _discardBatch = NewOp(NotesOpKind.Discard, ModLocalization.T("op_discard", "弃牌"));
+                Ops.Add(_discardBatch);
+            }
             _discardCount++;
             _discardBatch.Meta = string.IsNullOrEmpty(_discardBatch.Meta) ? name : _discardBatch.Meta + ", " + name;
             _discardBatch.Title = ModLocalization.T("op_discard", "弃牌") + "×" + _discardCount;
@@ -328,6 +336,7 @@ internal static class NotesOpLog
             op.CardType = cardType;
             op.Rarity = rarity;
             op.Upgraded = upgraded;
+            Ops.Add(op);
         }
         NotesRuntime.OnOpsChanged();
         return op;

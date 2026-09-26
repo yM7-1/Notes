@@ -53,7 +53,7 @@
   "region_clear": "Clear this turn",
   "region_delete": "Delete turn region",
   "import_turn": "Record turn",
-  "import_all": "Record combat",
+  "import_all": "Record → new line",
   "ops_clear": "Clear log",
   "status_ops": "Ops",
   "op_draw": "Draw",

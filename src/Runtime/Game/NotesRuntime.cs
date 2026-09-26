@@ -403,39 +403,27 @@ internal static class NotesRuntime
     /// <summary>Builds note nodes from the captured operations (idempotent).</summary>
     public static void Import(bool currentTurnOnly)
     {
-        var ops = NotesOpLog.Entries.ToList();
-        // Fallback: the persisted run file also holds the ops, so an import still
-        // works even if the in-memory log was cleared for any reason.
-        if (RunActive)
-        {
-            var persisted = NotesPersistence.LoadOpsForRun();
-            if (persisted.Count > 0)
-            {
-                var ids = ops.Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
-                foreach (var op in persisted.Where(op => ids.Add(op.Id)))
-                {
-                    ops.Add(op);
-                }
-                ops = ops.OrderBy(o => o.UnixMs).ToList();
-            }
-        }
-
+        var ops = CollectOps();
         var document = ActiveDocument;
         var board = ActiveBoard;
-        var line = document.EnsureActualWorldLine(board.Id);
 
+        NotesWorldLine line;
         List<int> turns;
         if (currentTurnOnly)
         {
-            var turn = CurrentTurn;
-            if (turn <= 0)
-            {
-                return;
-            }
-            turns = new List<int> { turn };
+            line = ResolveTargetWorldLine(document, board);
+            var turn = CurrentTurn > 0
+                ? CurrentTurn
+                : ops.Where(o => o.Turn > 0).Select(o => o.Turn).DefaultIfEmpty(0).Max();
+            turns = turn > 0 ? new List<int> { turn } : new List<int>();
         }
         else
         {
+            // Record the whole combat into a brand-new world line, and select it
+            // so follow-up "record turn" imports land on this line.
+            Commands.Execute(new AddWorldLineCommand(document, board.Id));
+            line = board.WorldLines[^1];
+            SelectWorldLine(line.Id);
             turns = ops.Where(o => o.Turn > 0).Select(o => o.Turn).Distinct().OrderBy(t => t).ToList();
             if (turns.Count == 0)
             {
@@ -466,11 +454,48 @@ internal static class NotesRuntime
             Commands.Execute(new CompositeCommand(commands, "Import"));
         }
         LastImportMessage = commands.Count > 0
-            ? ModLocalization.T("import_done", "已录入") + " " + commands.Count
+            ? ModLocalization.T("import_done", "已录入") + " " + commands.Count + " → " + line.Name
             : ModLocalization.T("import_empty", "没有可录入的操作");
         MegaCrit.Sts2.Core.Logging.Log.Info(
-            $"[Notes] import: turns={string.Join(",", turns)} ops={ops.Count} commands={commands.Count}");
+            $"[Notes] import: line={line.Name} turns={string.Join(",", turns)} ops={ops.Count} commands={commands.Count}");
         Raise();
+    }
+
+    /// <summary>In-memory ops merged with the ones persisted in the run file.</summary>
+    private static List<NotesOpData> CollectOps()
+    {
+        var ops = NotesOpLog.Entries.ToList();
+        if (RunActive)
+        {
+            var persisted = NotesPersistence.LoadOpsForRun();
+            if (persisted.Count > 0)
+            {
+                var ids = ops.Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
+                foreach (var op in persisted.Where(op => ids.Add(op.Id)))
+                {
+                    ops.Add(op);
+                }
+                ops = ops.OrderBy(o => o.UnixMs).ToList();
+            }
+        }
+        return ops;
+    }
+
+    /// <summary>Selected world line, or the line of the selected region, or the actual line.</summary>
+    private static NotesWorldLine ResolveTargetWorldLine(NotesDocument document, NotesBoard board)
+    {
+        if (SelectionKind == NotesSelectionKind.WorldLine
+            && board.FindWorldLine(SelectionId) is { } selected)
+        {
+            return selected;
+        }
+        if (SelectionKind == NotesSelectionKind.Region
+            && board.FindRegion(SelectionId) is { } region
+            && board.FindWorldLine(region.WorldLineId) is { } regionLine)
+        {
+            return regionLine;
+        }
+        return document.EnsureActualWorldLine(board.Id);
     }
 
     public static void ClearOps()
