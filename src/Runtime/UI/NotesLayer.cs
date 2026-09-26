@@ -35,18 +35,22 @@ public partial class NotesLayer : CanvasLayer
             ? new Vector2(savedX, savedY)
             : defaultPosition;
 
-        _box = new VBoxContainer { Name = "NotesHandleBox" };
+        _box = new VBoxContainer { Name = "NotesHandleBox", MouseFilter = Control.MouseFilterEnum.Ignore };
         _box.AddThemeConstantOverride("separation", 4);
         _box.Position = ClampToViewport(position, viewport, new Vector2(HandleWidth, HandleHeight));
         AddChild(_box);
 
-        var handleRow = new HBoxContainer();
+        var handleRow = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         handleRow.AddThemeConstantOverride("separation", 2);
         _box.AddChild(handleRow);
 
         _toggle = new DragHandle { Name = "NotesHandle" };
         _toggle.Setup(ModLocalization.T("toggle_button", "Notes"));
+        // Panel does not derive its minimum size from children: without this the
+        // container would collapse the handle to zero height (unclickable).
+        _toggle.CustomMinimumSize = new Vector2(HandleWidth, HandleHeight);
         _toggle.Size = new Vector2(HandleWidth, HandleHeight);
+        _toggle.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
         _toggle.TooltipText = ModLocalization.T("window_title", "Notes") + " (F8)";
         _toggle.Activated += OnHandleActivated;
         _toggle.DragMoved += delta => _box.Position = ClampBox(_box.Position + delta);
@@ -61,9 +65,10 @@ public partial class NotesLayer : CanvasLayer
         UiStyle.StyleButton(_collapseButton, fontSize: 12);
         _collapseButton.Pressed += Collapse;
         _collapseButton.CustomMinimumSize = new Vector2(22, HandleHeight);
+        _collapseButton.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
         handleRow.AddChild(_collapseButton);
 
-        _quickRow = new HBoxContainer();
+        _quickRow = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         _quickRow.AddThemeConstantOverride("separation", 4);
         _box.AddChild(_quickRow);
         var recordTurn = new Button
@@ -178,6 +183,7 @@ public partial class NotesLayer : CanvasLayer
         _quickRow.Visible = false;
         _collapseButton.Visible = false;
         _toggle.SetText(_side == 1 ? "▶" : "◀");
+        _toggle.CustomMinimumSize = new Vector2(ArrowWidth, ArrowHeight);
         _toggle.Size = new Vector2(ArrowWidth, ArrowHeight);
         ApplyCollapsedPosition();
         if (save)
@@ -192,6 +198,7 @@ public partial class NotesLayer : CanvasLayer
         _quickRow.Visible = true;
         _collapseButton.Visible = true;
         _toggle.SetText(ModLocalization.T("toggle_button", "Notes"));
+        _toggle.CustomMinimumSize = new Vector2(HandleWidth, HandleHeight);
         _toggle.Size = new Vector2(HandleWidth, HandleHeight);
         if (NotesRuntime.TryGetButtonPosition(out var savedX, out var savedY))
         {
@@ -266,7 +273,7 @@ public partial class DragHandle : Panel
             Text = text,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            MouseFilter = MouseFilterEnum.Ignore,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         _label.SetAnchorsPreset(LayoutPreset.FullRect);
         _label.AddThemeFontSizeOverride("font_size", 14);
