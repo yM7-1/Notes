@@ -298,6 +298,11 @@ internal static class NotesRuntime
         {
             _globalDirty = true;
         }
+        if (RunActive)
+        {
+            // The op log always belongs to the run, whatever library is shown.
+            _runDirty = true;
+        }
     }
 
     // ---- structured mode / op log --------------------------------------------
@@ -398,7 +403,23 @@ internal static class NotesRuntime
     /// <summary>Builds note nodes from the captured operations (idempotent).</summary>
     public static void Import(bool currentTurnOnly)
     {
-        var ops = NotesOpLog.Entries;
+        var ops = NotesOpLog.Entries.ToList();
+        // Fallback: the persisted run file also holds the ops, so an import still
+        // works even if the in-memory log was cleared for any reason.
+        if (RunActive)
+        {
+            var persisted = NotesPersistence.LoadOpsForRun();
+            if (persisted.Count > 0)
+            {
+                var ids = ops.Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
+                foreach (var op in persisted.Where(op => ids.Add(op.Id)))
+                {
+                    ops.Add(op);
+                }
+                ops = ops.OrderBy(o => o.UnixMs).ToList();
+            }
+        }
+
         var document = ActiveDocument;
         var board = ActiveBoard;
         var line = document.EnsureActualWorldLine(board.Id);

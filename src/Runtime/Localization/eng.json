@@ -108,5 +108,7 @@
   "snap_none": "none",
   "snap_enemies": "Enemies",
   "import_done": "Imported",
-  "import_empty": "Nothing to import (play cards / use potions first)"
+  "import_empty": "Nothing to import (play cards / use potions first)",
+  "trash_label": "Delete",
+  "trash_hint": "Drop here to delete"
 }

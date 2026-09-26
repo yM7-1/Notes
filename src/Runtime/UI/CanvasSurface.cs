@@ -303,14 +303,20 @@ public partial class CanvasSurface : Control
         {
             foreach (var slot in NotesLayout.FreeSlots(_board, region))
             {
-                var center = new Vector2(
-                    slot.X + NodeControl.NodeWidth / 2f,
-                    slot.Y + NodeControl.NodeHeight / 2f);
-                var hovered = center.DistanceTo(mouse) < 70f;
+                var rect = new Rect2(
+                    slot.X - 6,
+                    slot.Y - 6,
+                    NodeControl.NodeWidth + 12,
+                    NodeControl.NodeHeight + 12);
+                var hovered = rect.HasPoint(mouse);
                 var color = hovered ? UiStyle.Accent : UiStyle.Accent.Lerp(UiStyle.PanelBorder, 0.55f);
-                DrawCircle(center, hovered ? 20f : 16f, Color.FromHtml("171a20aa"));
-                DrawCircle(center, hovered ? 20f : 16f, color, false, 2f);
-                DrawString(font, center + new Vector2(-5, 5), "+", HorizontalAlignment.Left, -1, 16, color);
+                DrawRect(rect, hovered ? Color.FromHtml("f0c67426") : Color.FromHtml("f0c67414"), true);
+                DrawDashedRect(rect, color, hovered ? 2.5f : 2f);
+                var plus = "+";
+                var size = font.GetStringSize(plus, HorizontalAlignment.Left, -1, 24);
+                DrawString(font,
+                    rect.Position + new Vector2((rect.Size.X - size.X) / 2f, rect.Size.Y / 2f + size.Y / 2f - 7f),
+                    plus, HorizontalAlignment.Left, -1, 24, color);
             }
         }
     }

@@ -108,5 +108,7 @@
   "snap_none": "无",
   "snap_enemies": "敌方",
   "import_done": "已录入",
-  "import_empty": "没有可录入的操作（先在战斗中出牌/用药）"
+  "import_empty": "没有可录入的操作（先在战斗中出牌/用药）",
+  "trash_label": "删除",
+  "trash_hint": "拖到此处删除"
 }

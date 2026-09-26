@@ -3,7 +3,7 @@
   "name": "Notes",
   "author": "yM7-1",
   "description": "In-combat decision-tree / mind-map notepad. Drag cards from your hand onto a canvas and grow the world lines you have tried or are still speculating about. Purely local notes: it never probes RNG and never touches gameplay.",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": false,

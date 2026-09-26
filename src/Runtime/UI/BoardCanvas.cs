@@ -49,6 +49,9 @@ public partial class BoardCanvas : Control
     private bool _linkMode;
     private bool _dragActive;
     private Color _backdrop = UiStyle.CanvasBg;
+    private StyleBoxFlat _trashStyle = new();
+
+    private Rect2 TrashRect => new(16, MathF.Max(16, Size.Y - 80), 156, 64);
 
     public bool IsLinking => _linkFrom != null;
 
@@ -69,6 +72,32 @@ public partial class BoardCanvas : Control
     public override void _Draw()
     {
         DrawRect(new Rect2(Vector2.Zero, Size), _backdrop, true);
+        DrawTrash();
+    }
+
+    private void DrawTrash()
+    {
+        var rect = TrashRect;
+        var hovering = SlotHint && rect.HasPoint(GetLocalMousePosition());
+        _trashStyle.BgColor = hovering ? Color.FromHtml("5a2626") : Color.FromHtml("241d1f");
+        _trashStyle.BorderColor = hovering ? Color.FromHtml("e06c5f") : Color.FromHtml("4a3a3d");
+        _trashStyle.SetBorderWidthAll(hovering ? 2 : 1);
+        _trashStyle.SetCornerRadiusAll(10);
+        DrawStyleBox(_trashStyle, rect);
+
+        var font = ThemeDB.FallbackFont;
+        var label = ModLocalization.T("trash_label", "删除");
+        var size = font.GetStringSize(label, HorizontalAlignment.Left, -1, 15);
+        DrawString(font,
+            rect.Position + new Vector2((rect.Size.X - size.X) / 2f, 27),
+            label, HorizontalAlignment.Left, -1, 15,
+            hovering ? Color.FromHtml("e06c5f") : UiStyle.TextDim);
+
+        var hint = ModLocalization.T("trash_hint", "拖到此处删除");
+        var hintSize = font.GetStringSize(hint, HorizontalAlignment.Left, -1, 10);
+        DrawString(font,
+            rect.Position + new Vector2((rect.Size.X - hintSize.X) / 2f, 47),
+            hint, HorizontalAlignment.Left, -1, 10, UiStyle.TextDim);
     }
 
     public override void _Ready()
@@ -141,6 +170,15 @@ public partial class BoardCanvas : Control
         {
             _dragActive = false;
             _surface.QueueRedraw();
+            QueueRedraw();
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        if (SlotHint)
+        {
+            QueueRedraw(); // keep the trash highlight in sync while dragging
         }
     }
 
@@ -315,9 +353,14 @@ public partial class BoardCanvas : Control
     public override void _DropData(Vector2 atPosition, Variant data)
     {
         _dragActive = false;
+        QueueRedraw();
         if (_board == null)
         {
             return;
+        }
+        if (TrashRect.HasPoint(atPosition))
+        {
+            return; // dropping a palette legend on the trash just cancels
         }
         var dict = data.AsGodotDictionary();
         var snapshot = new CardSnapshot(
@@ -446,12 +489,21 @@ public partial class BoardCanvas : Control
             return null;
         }
         (NotesTurnRegion, NotesSlot)? best = null;
-        var bestDistance = 46f;
+        var bestDistance = float.MaxValue;
         foreach (var region in _board.TurnRegions)
         {
             foreach (var slot in NotesLayout.FreeSlots(_board, region))
             {
                 if (excludeNodeId != null && IsInSubtree(excludeNodeId, slot.ParentId))
+                {
+                    continue;
+                }
+                var rect = new Rect2(
+                    slot.X - 16,
+                    slot.Y - 16,
+                    NodeControl.NodeWidth + 32,
+                    NodeControl.NodeHeight + 32);
+                if (!rect.HasPoint(surfacePosition))
                 {
                     continue;
                 }
@@ -518,6 +570,7 @@ public partial class BoardCanvas : Control
     {
         _dragNode = null;
         _surface.QueueRedraw();
+        QueueRedraw();
         if (_board == null)
         {
             return;
@@ -527,12 +580,18 @@ public partial class BoardCanvas : Control
         {
             return;
         }
-        var structured = node.RegionId.Length > 0;
         if (!moved)
         {
             NotesRuntime.SelectNode(nodeId);
             return;
         }
+        if (TrashRect.HasPoint(GetLocalMousePosition()))
+        {
+            NotesRuntime.Commands.Execute(new RemoveNodeCommand(NotesRuntime.ActiveDocument, _board.Id, nodeId));
+            NotesRuntime.Raise();
+            return;
+        }
+        var structured = node.RegionId.Length > 0;
 
         var document = NotesRuntime.ActiveDocument;
         var commands = new List<INotesCommand>();

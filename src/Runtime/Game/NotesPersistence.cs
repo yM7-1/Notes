@@ -1,31 +1,42 @@
+using System.Text.Json;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Runs;
 using Notes.Core.Documents;
+using Notes.Core.Serialization;
 using STS2RitsuLib;
 using STS2RitsuLib.Data;
-using STS2RitsuLib.RunData;
 using STS2RitsuLib.Utils.Persistence;
 
 namespace Notes.Game;
 
 /// <summary>
-/// Storage for the two note libraries:
-/// - Run library: RitsuLib <c>RunSavedDataStore</c>, travels with the save file.
-/// - Global library: RitsuLib <c>ModDataStore</c> (Profile scope), survives runs.
+/// Storage for the two note libraries.
+/// - Run library: our own JSON file keyed by the run seed, so notes survive
+///   save-quit-continue (RitsuLib's RunSavedData slot did not get exported in
+///   testing, so we no longer depend on it).
+/// - Global library: RitsuLib ModDataStore (Profile scope), survives runs.
 /// Both are local-only; nothing is sent over the network.
 /// </summary>
 internal static class NotesPersistence
 {
-    private const string RunKey = "boards";
     private const string GlobalKey = "boards";
     private const string GlobalFile = "notes_boards";
 
-    private static RunSavedData<NotesRunData>? _runSlot;
     private static ModDataStore? _globalStore;
+    private static string? _runFilePathCache;
+    private static string _lastWrittenJson = "";
+
+    private sealed class RunFilePayload
+    {
+        public string Identity { get; set; } = "";
+
+        public NotesDocument Document { get; set; } = new();
+
+        public List<NotesOpData> Ops { get; set; } = new();
+    }
 
     public static void Register()
     {
-        _runSlot ??= RunSavedDataStore.For(Entry.ModId).Register<NotesRunData>(RunKey);
         try
         {
             var store = ModDataStore.For(Entry.ModId);
@@ -42,17 +53,13 @@ internal static class NotesPersistence
             Log.Error("[Notes] global store register failed: " + ex);
         }
 
-        RunManager.Instance.RunStarted += OnRunStarted;
-        // RunManager.RunStarted only fires for new runs; loaded saves need the
-        // RitsuLib lifecycle events (this was why capture/import stayed empty).
-        RitsuLibFramework.SubscribeLifecycle<RunStartedEvent>(e => OnRunStarted(e.RunState));
-        RitsuLibFramework.SubscribeLifecycle<RunLoadedEvent>(e => OnRunStarted(e.RunState));
+        RitsuLibFramework.SubscribeLifecycle<RunStartedEvent>(e => OnRunChanged(e.RunState));
+        RitsuLibFramework.SubscribeLifecycle<RunLoadedEvent>(e => OnRunChanged(e.RunState));
         RitsuLibFramework.SubscribeLifecycle<RunEndedEvent>(_ => OnRunEnded());
-        // Flush our in-memory notes into the run data before the game snapshots it.
         RitsuLibFramework.SubscribeLifecycle<RunSavingEvent>(_ => NotesRuntime.FlushSave());
     }
 
-    private static void OnRunStarted(RunState state)
+    private static void OnRunChanged(RunState state)
     {
         try
         {
@@ -61,7 +68,7 @@ internal static class NotesPersistence
                 return;
             }
             GameContext.CurrentRun = state;
-            Log.Info("[Notes] run context acquired");
+            Log.Info("[Notes] run context acquired (seed=" + IdentityOf(state) + ")");
             NotesRuntime.OnRunContextChanged();
         }
         catch (Exception ex)
@@ -88,20 +95,50 @@ internal static class NotesPersistence
         }
     }
 
+    // ---- run library (own file) ----------------------------------------------
+
+    private static string RunFilePath =>
+        _runFilePathCache ??= Path.Combine(Godot.OS.GetUserDataDir(), "Notes", "run_notes.json");
+
+    private static string IdentityOf(RunState state)
+    {
+        try
+        {
+            var seed = state.Rng?.StringSeed;
+            if (!string.IsNullOrWhiteSpace(seed))
+            {
+                return seed;
+            }
+        }
+        catch
+        {
+            // fall through
+        }
+        return "unknown";
+    }
+
     public static NotesDocument LoadRun(RunState state, out List<NotesOpData> ops)
     {
         ops = new List<NotesOpData>();
         try
         {
-            if (_runSlot != null && _runSlot.TryGet(state, out var data) && data != null)
+            var path = RunFilePath;
+            if (!File.Exists(path))
             {
-                ops = data.Ops ?? new List<NotesOpData>();
-                return data.Document ?? new NotesDocument();
+                return new NotesDocument();
             }
+            var payload = JsonSerializer.Deserialize<RunFilePayload>(File.ReadAllText(path), NotesJson.Options);
+            if (payload == null || payload.Identity != IdentityOf(state))
+            {
+                return new NotesDocument();
+            }
+            ops = payload.Ops ?? new List<NotesOpData>();
+            _lastWrittenJson = "";
+            return NotesJson.Normalize(payload.Document);
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] run data load failed: " + ex);
+            Log.Error("[Notes] run notes load failed: " + ex);
         }
         return new NotesDocument();
     }
@@ -110,17 +147,59 @@ internal static class NotesPersistence
     {
         try
         {
-            _runSlot?.Modify(state, data =>
+            var payload = new RunFilePayload
             {
-                data.Document = document;
-                data.Ops = ops.ToList();
-            });
+                Identity = IdentityOf(state),
+                Document = document,
+                Ops = ops.ToList(),
+            };
+            var json = JsonSerializer.Serialize(payload, NotesJson.Options);
+            if (json == _lastWrittenJson)
+            {
+                return;
+            }
+            var path = RunFilePath;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var tmp = path + ".tmp";
+            File.WriteAllText(tmp, json);
+            File.Move(tmp, path, overwrite: true);
+            _lastWrittenJson = json;
         }
         catch (Exception ex)
         {
-            Log.Error("[Notes] run data save failed: " + ex);
+            Log.Error("[Notes] run notes save failed: " + ex);
         }
     }
+
+    /// <summary>Persisted ops of the current run (fallback for import).</summary>
+    public static List<NotesOpData> LoadOpsForRun()
+    {
+        var run = GameContext.CurrentRun;
+        if (run == null)
+        {
+            return new List<NotesOpData>();
+        }
+        try
+        {
+            var path = RunFilePath;
+            if (!File.Exists(path))
+            {
+                return new List<NotesOpData>();
+            }
+            var payload = JsonSerializer.Deserialize<RunFilePayload>(File.ReadAllText(path), NotesJson.Options);
+            if (payload != null && payload.Identity == IdentityOf(run))
+            {
+                return payload.Ops ?? new List<NotesOpData>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] run ops load failed: " + ex);
+        }
+        return new List<NotesOpData>();
+    }
+
+    // ---- global library (ModDataStore) ---------------------------------------
 
     /// <summary>False while profile services are not ready yet; the caller retries.</summary>
     public static bool TryLoadGlobal(out NotesDocument document)
