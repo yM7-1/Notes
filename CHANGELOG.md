@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.1 — 2026-09-26
+
+- 修复：`NotesLayer._Ready` 在窗口创建前调用 `UpdateHandleStyle()` 抛 NullReferenceException，
+  导致右侧开关把手根本没被挂上（入口消失）、F8 也报错
+
 ## v0.2.0 — 2026-09-26
 
 - 拖动跟手修复：节点拖动改用全局鼠标坐标（消除本地坐标反馈造成的迟滞）

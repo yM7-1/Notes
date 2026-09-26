@@ -37,12 +37,12 @@ public partial class NotesLayer : CanvasLayer
             _handleDragged = true;
             NotesRuntime.SaveButtonPosition(_toggle.Position.X, _toggle.Position.Y);
         };
-        UpdateHandleStyle();
         AddChild(_toggle);
 
         _window = new NotesWindow { Name = "NotesWindow" };
         AddChild(_window);
         _window.Hide();
+        UpdateHandleStyle();
     }
 
     public override void _Process(double delta)
@@ -78,7 +78,7 @@ public partial class NotesLayer : CanvasLayer
         UpdateHandleStyle();
     }
 
-    private void UpdateHandleStyle() => UiStyle.StyleHandle(_toggle, _window.Visible);
+    private void UpdateHandleStyle() => UiStyle.StyleHandle(_toggle, _window != null && _window.Visible);
 
     private static Vector2 ClampToViewport(Vector2 position, Vector2 viewport)
     {
