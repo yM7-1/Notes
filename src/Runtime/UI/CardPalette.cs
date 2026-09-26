@@ -33,7 +33,7 @@ public partial class CardPalette : PanelContainer
     public override void _Ready()
     {
         CustomMinimumSize = new Vector2(292, 0);
-        AddThemeStyleboxOverride("panel", UiStyle.Box(UiStyle.PanelBg, UiStyle.PanelBorder));
+        AddThemeStyleboxOverride("panel", UiStyle.Box(UiStyle.PanelBg, UiStyle.PanelBorder, shadow: true));
 
         var root = new VBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         root.AddThemeConstantOverride("separation", 6);
@@ -50,6 +50,7 @@ public partial class CardPalette : PanelContainer
         tabs.AddChild(_codexTab);
 
         _search = new LineEdit { PlaceholderText = ModLocalization.T("palette_search", "Search all cards…") };
+        UiStyle.StyleInput(_search);
         _search.TextChanged += _ => Refresh(force: true);
         root.AddChild(_search);
 
@@ -80,7 +81,7 @@ public partial class CardPalette : PanelContainer
         var scroll = new ScrollContainer
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(0, 360),
+            CustomMinimumSize = new Vector2(0, 160),
         };
         root.AddChild(scroll);
         _rows = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };

@@ -120,7 +120,10 @@ public partial class NodeControl : Control
         _box.BgColor = background;
         _box.BorderColor = border;
         _box.SetBorderWidthAll(selected ? 3 : _node.State == NodeState.None && !_hover ? 1 : 2);
-        _box.SetCornerRadiusAll(9);
+        _box.SetCornerRadiusAll(10);
+        _box.ShadowColor = new Color(0f, 0f, 0f, selected || _dragging ? 0.5f : _hover ? 0.42f : 0.3f);
+        _box.ShadowSize = selected || _dragging ? 10 : _hover ? 7 : 4;
+        _box.ShadowOffset = new Vector2(0, selected || _dragging ? 4 : 2);
         DrawStyleBox(_box, new Rect2(Vector2.Zero, Size));
         if (selected)
         {
@@ -174,8 +177,9 @@ public partial class NodeControl : Control
                 NodeState.Confirmed => "★",
                 _ => "",
             };
-            var badge = new Rect2(Size.X - 26, 7, 19, 17);
-            _badge.BgColor = UiStyle.BadgeBg;
+            var badge = new Rect2(Size.X - 30, 6, 23, 18);
+            _badge.SetCornerRadiusAll(9);
+            _badge.BgColor = new Color(stateColor.R, stateColor.G, stateColor.B, 0.2f);
             _badge.BorderColor = stateColor;
             DrawStyleBox(_badge, badge);
             var glyphSize = font.GetStringSize(stateGlyph, HorizontalAlignment.Left, -1, 11);

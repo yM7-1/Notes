@@ -17,25 +17,35 @@ public partial class NoteEditDialog : AcceptDialog
     public override void _Ready()
     {
         OkButtonText = ModLocalization.T("save", "Save");
+        UiStyle.StyleDialog(this);
 
         var root = new VBoxContainer { CustomMinimumSize = new Vector2(360, 0) };
         root.AddThemeConstantOverride("separation", 4);
         AddChild(root);
 
         _titleLabel = new Label { Text = ModLocalization.T("dialog_title_label", "Title") };
+        _titleLabel.AddThemeColorOverride("font_color", UiStyle.TextDim);
         root.AddChild(_titleLabel);
         _title = new LineEdit();
+        UiStyle.StyleInput(_title);
+        _title.TextSubmitted += _ =>
+        {
+            Hide();
+            OnConfirmed();
+        };
         root.AddChild(_title);
 
         _noteBox = new VBoxContainer();
         root.AddChild(_noteBox);
         _noteLabel = new Label { Text = ModLocalization.T("dialog_note_label", "Note") };
+        _noteLabel.AddThemeColorOverride("font_color", UiStyle.TextDim);
         _noteBox.AddChild(_noteLabel);
         _note = new TextEdit
         {
             CustomMinimumSize = new Vector2(360, 120),
             WrapMode = TextEdit.LineWrappingMode.Boundary,
         };
+        UiStyle.StyleInput(_note);
         _noteBox.AddChild(_note);
 
         Confirmed += OnConfirmed;

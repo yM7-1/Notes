@@ -92,6 +92,14 @@ public partial class NotesLayer : CanvasLayer
         _window = new NotesWindow { Name = "NotesWindow" };
         AddChild(_window);
         _window.Hide();
+        _window.VisibilityChanged += () =>
+        {
+            UpdateHandleStyle();
+            if (!_window.Visible)
+            {
+                NotesRuntime.FlushSave();
+            }
+        };
         UpdateHandleStyle();
 
         if (NotesRuntime.TryGetHandleState(out var collapsed, out var side))

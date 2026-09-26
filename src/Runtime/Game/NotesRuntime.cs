@@ -284,6 +284,30 @@ internal static class NotesRuntime
         return false;
     }
 
+    /// <summary>Remembers where the player parked the notes window.</summary>
+    public static void SaveWindowPosition(float x, float y)
+    {
+        if (NotesPersistence.TryGetGlobalData(out var data))
+        {
+            data.WindowX = x;
+            data.WindowY = y;
+            NotesPersistence.SaveGlobalNow();
+        }
+    }
+
+    public static bool TryGetWindowPosition(out float x, out float y)
+    {
+        if (NotesPersistence.TryGetGlobalData(out var data) && data.WindowX >= 0f && data.WindowY >= 0f)
+        {
+            x = data.WindowX;
+            y = data.WindowY;
+            return true;
+        }
+        x = 0f;
+        y = 0f;
+        return false;
+    }
+
     /// <summary>Remembers the notes window size.</summary>
     public static void SaveWindowSize(float width, float height)
     {
@@ -622,9 +646,10 @@ internal static class NotesRuntime
     }
 
     /// <summary>Records the current turn's operations into the selected
-    /// interactive world-line board, overwriting that turn's imported chain
-    /// (manual nodes survive). The read-only current board cannot be recorded;
-    /// copy it into a world line first.</summary>
+    /// interactive world-line board, overwriting that turn's imported chain.
+    /// On the read-only current line the turn is copied into a fresh
+    /// interactive line first, so "record this turn" always lands somewhere
+    /// editable.</summary>
     public static void Import(bool currentTurnOnly)
     {
         if (!RunActive)
@@ -637,15 +662,27 @@ internal static class NotesRuntime
         {
             SetLibrary(NotesLibrary.Run);
         }
-        var board = ActiveDocument == RunDocument ? ActiveBoard : null;
-        if (board == null || board.Kind != BoardKind.WorldLine)
+        var ops = CollectOps();
+        if (ops.Count == 0)
         {
-            LastImportMessage = ModLocalization.T("import_readonly",
-                "当前世界线为自动记录（只读）：请先「复制→新世界线」再录入");
+            LastImportMessage = ModLocalization.T("import_empty", "没有可录入的操作");
             Raise();
             return;
         }
-        var ops = CollectOps();
+        var board = ActiveDocument == RunDocument ? ActiveBoard : null;
+        if (board?.Kind == BoardKind.Current)
+        {
+            CopyCurrentToNewLine();
+            board = ActiveBoard;
+            LastImportMessage = "";
+        }
+        if (board == null || board.Kind != BoardKind.WorldLine)
+        {
+            LastImportMessage = ModLocalization.T("import_readonly",
+                "请先「复制→新世界线」或「+ 世界线」创建可交互画板再录入");
+            Raise();
+            return;
+        }
         var document = RunDocument;
         var line = document.EnsureActualWorldLine(board.Id, board.Name);
         var turn = CurrentTurn > 0

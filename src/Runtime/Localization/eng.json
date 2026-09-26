@@ -10,7 +10,7 @@
   "board_current": "Current line",
   "copy_current_line": "Copy → new line",
   "copy_done": "Copied to",
-  "import_readonly": "The current line is auto-recorded (read-only): copy it to a world line first",
+  "import_readonly": "Create an editable board first (Copy → new line, or + World line), then record",
   "status_readonly": "Current line is auto-recorded (read-only): use \"Copy → new line\" to create an editable board",
   "quick_record_turn": "Record turn",
   "quick_record_turn_tip": "Record this turn into the selected world-line board (overwrites that turn)",
@@ -148,5 +148,18 @@
   "import_done": "Imported",
   "import_empty": "Nothing to import (play cards / use potions first)",
   "trash_label": "Delete",
-  "trash_hint": "Drop here to delete"
+  "trash_hint": "Drop here to delete",
+  "window_drag_tip": "Drag to move the window",
+  "board_new_tip": "Create a free board",
+  "board_delete_tip": "Delete the current board (system boards cannot be deleted)",
+  "world_line_new_tip": "Create an editable world-line board",
+  "add_text_tip": "Add a text node at the view center",
+  "ops_clear_tip": "Clear the captured operation log",
+  "undo_tip": "Undo (Ctrl+Z)",
+  "redo_tip": "Redo (Ctrl+Y)",
+  "reset_view_tip": "Reset zoom and pan",
+  "empty_current_title": "Nothing recorded yet",
+  "empty_current_hint": "Combat actions show up here automatically",
+  "empty_board_title": "Empty board",
+  "empty_board_hint": "Drag a card from the right, or hit “Record turn”"
 }

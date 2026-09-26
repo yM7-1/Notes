@@ -10,7 +10,7 @@
   "board_current": "当前世界线",
   "copy_current_line": "复制→新世界线",
   "copy_done": "已复制到",
-  "import_readonly": "当前世界线为自动记录（只读）：请先「复制→新世界线」再录入",
+  "import_readonly": "请先「复制→新世界线」或「+ 世界线」创建可交互画板再录入",
   "status_readonly": "当前世界线为自动记录（只读）：用「复制→新世界线」创建可交互画板",
   "quick_record_turn": "记本回合",
   "quick_record_turn_tip": "把本回合操作录入当前可交互世界线（覆盖该回合）",
@@ -148,5 +148,18 @@
   "import_done": "已录入",
   "import_empty": "没有可录入的操作（先在战斗中出牌/用药）",
   "trash_label": "删除",
-  "trash_hint": "拖到此处删除"
+  "trash_hint": "拖到此处删除",
+  "window_drag_tip": "拖动移动窗口",
+  "board_new_tip": "新建自由画板",
+  "board_delete_tip": "删除当前画板（系统画板不可删）",
+  "world_line_new_tip": "新建可交互的世界线画板",
+  "add_text_tip": "在视图中心添加文字节点",
+  "ops_clear_tip": "清空本局操作记录",
+  "undo_tip": "撤销 (Ctrl+Z)",
+  "redo_tip": "重做 (Ctrl+Y)",
+  "reset_view_tip": "重置缩放与平移",
+  "empty_current_title": "本回合暂无记录",
+  "empty_current_hint": "战斗中的操作会自动记录在这里",
+  "empty_board_title": "空画板",
+  "empty_board_hint": "从右侧拖入卡牌，或点「记本回合」录入本回合"
 }

@@ -15,6 +15,11 @@ public sealed class NotesGlobalData
 
     public float WindowH { get; set; } = -1f;
 
+    /// <summary>Notes window position; -1 = default.</summary>
+    public float WindowX { get; set; } = -1f;
+
+    public float WindowY { get; set; } = -1f;
+
     /// <summary>Handle collapsed into a small edge arrow.</summary>
     public bool HandleCollapsed { get; set; }
 

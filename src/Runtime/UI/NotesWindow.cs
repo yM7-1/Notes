@@ -9,8 +9,8 @@ namespace Notes.UI;
 /// Freely resizable via the bottom-right grip; size is remembered.</summary>
 public partial class NotesWindow : Control
 {
-    private const float MinWindowWidth = 560f;
-    private const float MinWindowHeight = 380f;
+    private const float MinWindowWidth = 680f;
+    private const float MinWindowHeight = 520f;
 
     private OptionButton _boardPicker = null!;
     private Button _libraryButton = null!;
@@ -28,6 +28,8 @@ public partial class NotesWindow : Control
     private bool _updating;
     private bool _resizing;
     private bool _sizeApplied;
+    private bool _windowDragging;
+    private Vector2 _dragOffset;
     private Vector2 _resizeStart;
     private Vector2 _resizeOrigin;
 
@@ -42,6 +44,7 @@ public partial class NotesWindow : Control
                     Mathf.Max(savedW, MinWindowWidth),
                     Mathf.Max(savedH, MinWindowHeight));
             }
+            Position = ClampPosition(Position);
             SetProcess(false);
         }
     }
@@ -53,12 +56,19 @@ public partial class NotesWindow : Control
             ? new Vector2(Mathf.Max(savedW, MinWindowWidth), Mathf.Max(savedH, MinWindowHeight))
             : new Vector2(1000, 640);
         _sizeApplied = NotesRuntime.GlobalLoaded;
-        Position = new Vector2(48, 40);
+        Position = NotesRuntime.TryGetWindowPosition(out var posX, out var posY)
+            ? new Vector2(posX, posY)
+            : new Vector2(48, 40);
+        Position = ClampPosition(Position);
+        if (_sizeApplied)
+        {
+            SetProcess(false);
+        }
         ClipContents = true;
 
         var background = new Panel { MouseFilter = MouseFilterEnum.Ignore };
         background.SetAnchorsPreset(LayoutPreset.FullRect);
-        background.AddThemeStyleboxOverride("panel", UiStyle.Box(UiStyle.WindowBg, UiStyle.PanelBorder, 10, 2));
+        background.AddThemeStyleboxOverride("panel", UiStyle.Box(UiStyle.WindowBg, UiStyle.PanelBorder, 10, 2, shadow: true));
         AddChild(background);
 
         var margin = new MarginContainer();
@@ -73,17 +83,26 @@ public partial class NotesWindow : Control
         root.AddThemeConstantOverride("separation", 8);
         margin.AddChild(root);
 
+        // Row 1: title (drag handle), library switch, board picker, close.
         var header = new HBoxContainer();
         header.AddThemeConstantOverride("separation", 6);
+        header.GuiInput += OnDragAreaInput;
         root.AddChild(header);
 
-        var title = new Label { Text = ModLocalization.T("window_title", "Notes") };
+        var title = new Label
+        {
+            Text = ModLocalization.T("window_title", "Notes"),
+            MouseFilter = MouseFilterEnum.Stop,
+            MouseDefaultCursorShape = CursorShape.Drag,
+            TooltipText = ModLocalization.T("window_drag_tip", "拖动移动窗口"),
+        };
         title.AddThemeFontSizeOverride("font_size", 16);
         title.AddThemeColorOverride("font_color", UiStyle.Accent);
+        title.GuiInput += OnDragAreaInput;
         header.AddChild(title);
 
-        _libraryButton = MakeButton("", OnLibraryPressed);
-        _libraryButton.TooltipText = ModLocalization.T("library_switch_tip", "Switch library");
+        _libraryButton = MakeButton("", OnLibraryPressed,
+            ModLocalization.T("library_switch_tip", "Switch library"));
         header.AddChild(_libraryButton);
 
         _boardPicker = new OptionButton
@@ -94,15 +113,31 @@ public partial class NotesWindow : Control
         _boardPicker.ItemSelected += OnBoardSelected;
         header.AddChild(_boardPicker);
 
-        header.AddChild(MakeButton(ModLocalization.T("board_new", "+ Board"), () => NotesRuntime.NewBoard()));
-        _deleteBoardButton = MakeButton(ModLocalization.T("board_delete", "Del Board"), ShowDeleteBoard);
-        header.AddChild(_deleteBoardButton);
-        header.AddChild(MakeButton(ModLocalization.T("world_line_new", "+ World line"), () => NotesRuntime.NewWorldLine()));
-        _textButton = MakeButton(ModLocalization.T("add_text", "+ Text"), AddTextHere);
-        header.AddChild(_textButton);
-        header.AddChild(MakeButton(ModLocalization.T("import_turn", "Record turn"), () => NotesRuntime.Import(currentTurnOnly: true)));
-        header.AddChild(MakeButton(ModLocalization.T("copy_current_line", "Copy → new line"), () => NotesRuntime.CopyCurrentToNewLine()));
-        header.AddChild(MakeButton(ModLocalization.T("ops_clear", "Clear log"), () => NotesRuntime.ClearOps()));
+        header.AddChild(MakeButton(ModLocalization.T("close", "Close"), Hide));
+
+        // Row 2: actions in a flow container so they wrap instead of clipping
+        // when the window is narrow.
+        var actions = new HFlowContainer();
+        actions.AddThemeConstantOverride("h_separation", 6);
+        actions.AddThemeConstantOverride("v_separation", 6);
+        root.AddChild(actions);
+
+        actions.AddChild(MakeButton(ModLocalization.T("board_new", "+ Board"),
+            () => NotesRuntime.NewBoard(), ModLocalization.T("board_new_tip", "新建自由画板")));
+        _deleteBoardButton = MakeButton(ModLocalization.T("board_delete", "Del Board"), ShowDeleteBoard,
+            ModLocalization.T("board_delete_tip", "删除当前画板（系统画板不可删）"));
+        actions.AddChild(_deleteBoardButton);
+        actions.AddChild(MakeButton(ModLocalization.T("world_line_new", "+ World line"),
+            () => NotesRuntime.NewWorldLine(), ModLocalization.T("world_line_new_tip", "新建可交互的世界线画板")));
+        _textButton = MakeButton(ModLocalization.T("add_text", "+ Text"), AddTextHere,
+            ModLocalization.T("add_text_tip", "在视图中心添加文字节点"));
+        actions.AddChild(_textButton);
+        actions.AddChild(MakeButton(ModLocalization.T("import_turn", "Record turn"),
+            () => NotesRuntime.Import(currentTurnOnly: true), ModLocalization.T("quick_record_turn_tip", "把本回合操作录入当前世界线（覆盖该回合）")));
+        actions.AddChild(MakeButton(ModLocalization.T("copy_current_line", "Copy → new line"),
+            () => NotesRuntime.CopyCurrentToNewLine(), ModLocalization.T("quick_copy_line_tip", "把当前世界线复制成可交互的世界线画板")));
+        actions.AddChild(MakeButton(ModLocalization.T("ops_clear", "Clear log"),
+            () => NotesRuntime.ClearOps(), ModLocalization.T("ops_clear_tip", "清空本局操作记录")));
 
         _linkButton = new Button
         {
@@ -112,24 +147,24 @@ public partial class NotesWindow : Control
         };
         UiStyle.StyleButton(_linkButton, accent: true);
         _linkButton.Toggled += OnLinkToggled;
-        header.AddChild(_linkButton);
+        actions.AddChild(_linkButton);
 
         _undoButton = MakeButton(ModLocalization.T("undo", "Undo"), () =>
         {
             NotesRuntime.Commands.Undo();
             NotesRuntime.Raise();
-        });
-        header.AddChild(_undoButton);
+        }, ModLocalization.T("undo_tip", "撤销 (Ctrl+Z)"));
+        actions.AddChild(_undoButton);
 
         _redoButton = MakeButton(ModLocalization.T("redo", "Redo"), () =>
         {
             NotesRuntime.Commands.Redo();
             NotesRuntime.Raise();
-        });
-        header.AddChild(_redoButton);
+        }, ModLocalization.T("redo_tip", "重做 (Ctrl+Y)"));
+        actions.AddChild(_redoButton);
 
-        header.AddChild(MakeButton(ModLocalization.T("reset_view", "Reset"), () => _canvas.ResetView()));
-        header.AddChild(MakeButton(ModLocalization.T("close", "Close"), Hide));
+        actions.AddChild(MakeButton(ModLocalization.T("reset_view", "Reset"),
+            () => _canvas.ResetView(), ModLocalization.T("reset_view_tip", "重置缩放与平移")));
 
         var body = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         body.AddThemeConstantOverride("separation", 8);
@@ -160,7 +195,13 @@ public partial class NotesWindow : Control
         right.AddChild(_inspector);
         body.AddChild(right);
 
-        _status = new Label { Text = ModLocalization.T("status_hint", "") };
+        _status = new Label
+        {
+            Text = ModLocalization.T("status_hint", ""),
+            TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
+            ClipText = true,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
         _status.AddThemeFontSizeOverride("font_size", 11);
         _status.AddThemeColorOverride("font_color", UiStyle.TextDim);
         root.AddChild(_status);
@@ -186,6 +227,7 @@ public partial class NotesWindow : Control
             Title = ModLocalization.T("board_delete", "Del Board"),
             DialogText = ModLocalization.T("delete_board_text", "Delete the current board?"),
         };
+        UiStyle.StyleDialog(_deleteConfirm);
         _deleteConfirm.Confirmed += () =>
         {
             var board = NotesRuntime.ActiveBoard;
@@ -199,6 +241,40 @@ public partial class NotesWindow : Control
         NotesRuntime.SelectionChanged += RefreshInspector;
         RefreshHeader();
         RefreshInspector();
+    }
+
+    /// <summary>Drag the window by its title / empty header space; the position
+    /// is clamped to the viewport and remembered.</summary>
+    private void OnDragAreaInput(InputEvent @event)
+    {
+        if (@event is InputEventMouseButton button && button.ButtonIndex == MouseButton.Left)
+        {
+            if (button.Pressed)
+            {
+                _windowDragging = true;
+                _dragOffset = GetGlobalMousePosition() - Position;
+            }
+            else if (_windowDragging)
+            {
+                _windowDragging = false;
+                NotesRuntime.SaveWindowPosition(Position.X, Position.Y);
+            }
+            AcceptEvent();
+            return;
+        }
+        if (@event is InputEventMouseMotion && _windowDragging)
+        {
+            Position = ClampPosition(GetGlobalMousePosition() - _dragOffset);
+            AcceptEvent();
+        }
+    }
+
+    private Vector2 ClampPosition(Vector2 position)
+    {
+        var viewport = GetViewportRect().Size;
+        return new Vector2(
+            Mathf.Clamp(position.X, 0f, Mathf.Max(0f, viewport.X - Size.X)),
+            Mathf.Clamp(position.Y, 0f, Mathf.Max(0f, viewport.Y - Size.Y)));
     }
 
     private void OnGripInput(InputEvent @event)
@@ -257,9 +333,16 @@ public partial class NotesWindow : Control
         {
             return;
         }
-        if (key.Keycode == Key.Escape && _canvas.LinkMode)
+        if (key.Keycode == Key.Escape)
         {
-            _linkButton.ButtonPressed = false;
+            if (_canvas.LinkMode)
+            {
+                _linkButton.ButtonPressed = false;
+            }
+            else
+            {
+                Hide();
+            }
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -358,6 +441,7 @@ public partial class NotesWindow : Control
                 + "  ·  " + ModLocalization.T("status_ops", "Ops") + " " + NotesRuntime.OpsCount
                 + (import.Length > 0 ? "  ·  " + import : "")
                 + "  ·  " + hint;
+            _status.TooltipText = _status.Text;
         }
         finally
         {
@@ -554,10 +638,14 @@ public partial class NotesWindow : Control
         _deleteConfirm.PopupCentered(new Vector2I(380, 140));
     }
 
-    private static Button MakeButton(string text, Action onPressed)
+    private static Button MakeButton(string text, Action onPressed, string? tooltip = null)
     {
         var button = new Button { Text = text };
         UiStyle.StyleButton(button);
+        if (!string.IsNullOrEmpty(tooltip))
+        {
+            button.TooltipText = tooltip;
+        }
         button.Pressed += onPressed;
         return button;
     }

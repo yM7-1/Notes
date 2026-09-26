@@ -11,8 +11,8 @@ public partial class InspectorPanel : PanelContainer
 
     public override void _Ready()
     {
-        AddThemeStyleboxOverride("panel", UiStyle.Box(UiStyle.PanelBg, UiStyle.PanelBorder));
-        CustomMinimumSize = new Vector2(292, 170);
+        AddThemeStyleboxOverride("panel", UiStyle.Box(UiStyle.PanelBg, UiStyle.PanelBorder, shadow: true));
+        CustomMinimumSize = new Vector2(292, 150);
 
         var root = new VBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         root.AddThemeConstantOverride("separation", 4);

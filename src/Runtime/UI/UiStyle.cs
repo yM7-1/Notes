@@ -66,18 +66,29 @@ internal static class UiStyle
         _ => Accent,
     };
 
-    public static string KindGlyph(NodeKind kind) => kind switch
-    {
-        NodeKind.Draw => "抽",
-        NodeKind.Discard => "弃",
-        NodeKind.Potion => "药",
-        NodeKind.Relic => "遗",
-        NodeKind.EndTurn => "终",
-        NodeKind.Exhaust => "耗",
-        _ => "",
-    };
+    public static string KindGlyph(NodeKind kind) => ModLocalization.IsChinese
+        ? kind switch
+        {
+            NodeKind.Draw => "抽",
+            NodeKind.Discard => "弃",
+            NodeKind.Potion => "药",
+            NodeKind.Relic => "遗",
+            NodeKind.EndTurn => "终",
+            NodeKind.Exhaust => "耗",
+            _ => "",
+        }
+        : kind switch
+        {
+            NodeKind.Draw => "D",
+            NodeKind.Discard => "X",
+            NodeKind.Potion => "P",
+            NodeKind.Relic => "R",
+            NodeKind.EndTurn => "E",
+            NodeKind.Exhaust => "EX",
+            _ => "",
+        };
 
-    public static StyleBoxFlat Box(Color background, Color border, int radius = 6, int borderWidth = 1)
+    public static StyleBoxFlat Box(Color background, Color border, int radius = 6, int borderWidth = 1, bool shadow = false)
     {
         var style = new StyleBoxFlat { BgColor = background, BorderColor = border };
         style.SetBorderWidthAll(borderWidth);
@@ -86,6 +97,12 @@ internal static class UiStyle
         style.ContentMarginRight = 6;
         style.ContentMarginTop = 4;
         style.ContentMarginBottom = 4;
+        if (shadow)
+        {
+            style.ShadowColor = new Color(0f, 0f, 0f, 0.45f);
+            style.ShadowSize = 10;
+            style.ShadowOffset = new Vector2(0, 4);
+        }
         return style;
     }
 
@@ -137,6 +154,58 @@ internal static class UiStyle
         row.AddThemeColorOverride("font_color", TextMain);
         row.AddThemeColorOverride("font_hover_color", Colors.White);
         row.FocusMode = Control.FocusModeEnum.None;
+    }
+
+    /// <summary>Dark theme for right-click menus.</summary>
+    public static void StylePopup(PopupMenu menu)
+    {
+        menu.AddThemeStyleboxOverride("panel", Box(PanelBg, PanelBorder, 8, 1));
+        menu.AddThemeStyleboxOverride("hover", ButtonStyle(ButtonHover, Accent, 6, 8, 4));
+        menu.AddThemeColorOverride("font_color", TextMain);
+        menu.AddThemeColorOverride("font_hover_color", Colors.White);
+        menu.AddThemeColorOverride("font_disabled_color", Color.FromHtml("5b6069"));
+        menu.AddThemeColorOverride("font_separator_color", TextDim);
+        menu.AddThemeFontSizeOverride("font_size", 12);
+    }
+
+    /// <summary>Dark theme for modal dialogs (title bar + panel + buttons).</summary>
+    public static void StyleDialog(Window dialog)
+    {
+        dialog.AddThemeStyleboxOverride("embedded_border", Box(WindowBg, PanelBorder, 10, 2, shadow: true));
+        dialog.AddThemeColorOverride("title_color", Accent);
+        dialog.AddThemeFontSizeOverride("title_font_size", 13);
+        if (dialog is AcceptDialog accept)
+        {
+            accept.GetLabel().AddThemeColorOverride("font_color", TextMain);
+            accept.GetLabel().AddThemeFontSizeOverride("font_size", 12);
+            StyleButton(accept.GetOkButton(), accent: true);
+            if (dialog is ConfirmationDialog confirm)
+            {
+                StyleButton(confirm.GetCancelButton());
+            }
+        }
+    }
+
+    public static void StyleInput(LineEdit edit)
+    {
+        edit.AddThemeStyleboxOverride("normal", Box(BadgeBg, PanelBorder, 6, 1));
+        edit.AddThemeStyleboxOverride("focus", Box(BadgeBg, Accent, 6, 1));
+        edit.AddThemeColorOverride("font_color", TextMain);
+        edit.AddThemeColorOverride("font_placeholder_color", Color.FromHtml("6f7784"));
+        edit.AddThemeColorOverride("caret_color", Accent);
+        edit.AddThemeColorOverride("selection_color", new Color(Accent.R, Accent.G, Accent.B, 0.35f));
+        edit.AddThemeFontSizeOverride("font_size", 12);
+    }
+
+    public static void StyleInput(TextEdit edit)
+    {
+        edit.AddThemeStyleboxOverride("normal", Box(BadgeBg, PanelBorder, 6, 1));
+        edit.AddThemeStyleboxOverride("focus", Box(BadgeBg, Accent, 6, 1));
+        edit.AddThemeColorOverride("font_color", TextMain);
+        edit.AddThemeColorOverride("font_placeholder_color", Color.FromHtml("6f7784"));
+        edit.AddThemeColorOverride("caret_color", Accent);
+        edit.AddThemeColorOverride("selection_color", new Color(Accent.R, Accent.G, Accent.B, 0.35f));
+        edit.AddThemeFontSizeOverride("font_size", 12);
     }
 
     public static string Ellipsize(string text, Font font, int fontSize, float maxWidth)

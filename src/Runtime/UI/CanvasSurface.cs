@@ -228,6 +228,11 @@ public partial class CanvasSurface : Control
             DrawEdge(edge);
         }
 
+        if (_board.Kind != BoardKind.Overview && _board.Nodes.Count == 0)
+        {
+            DrawEmptyHint();
+        }
+
         if (_canvas.SlotHint)
         {
             DrawSlots();
@@ -442,6 +447,28 @@ public partial class CanvasSurface : Control
                 DrawString(font, box.Position + new Vector2(6, 13), text, HorizontalAlignment.Left, -1, 10, accent);
             }
         }
+    }
+
+    /// <summary>Friendly guidance in the middle of an empty board, in view
+    /// coordinates so it stays visible whatever the pan/zoom is.</summary>
+    private void DrawEmptyHint()
+    {
+        var font = ThemeDB.FallbackFont;
+        var zoom = Scale.X <= 0.01f ? 1f : Scale.X;
+        var center = (_canvas.Size / 2f - Position) / zoom;
+        var readOnly = _board?.IsReadOnly ?? false;
+        var title = readOnly
+            ? ModLocalization.T("empty_current_title", "本回合暂无记录")
+            : ModLocalization.T("empty_board_title", "空画板");
+        var hint = readOnly
+            ? ModLocalization.T("empty_current_hint", "战斗中的操作会自动记录在这里")
+            : ModLocalization.T("empty_board_hint", "从右侧拖入卡牌，或点「记本回合」录入本回合");
+        var titleSize = font.GetStringSize(title, HorizontalAlignment.Left, -1, 15);
+        var hintSize = font.GetStringSize(hint, HorizontalAlignment.Left, -1, 11);
+        DrawString(font, center - new Vector2(titleSize.X / 2f, 2f), title,
+            HorizontalAlignment.Left, -1, 15, UiStyle.TextDim);
+        DrawString(font, center - new Vector2(hintSize.X / 2f, -18f), hint,
+            HorizontalAlignment.Left, -1, 11, UiStyle.TextDim.Lerp(UiStyle.PanelBorder, 0.4f));
     }
 
     private void DrawSlots()

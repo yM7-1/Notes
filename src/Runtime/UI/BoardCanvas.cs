@@ -50,6 +50,7 @@ public partial class BoardCanvas : Control
     private bool _dragActive;
     private Color _backdrop = UiStyle.CanvasBg;
     private StyleBoxFlat _trashStyle = new();
+    private StyleBoxFlat _zoomStyle = new();
 
     private Rect2 TrashRect => new(16, MathF.Max(16, Size.Y - 80), 156, 64);
 
@@ -72,16 +73,35 @@ public partial class BoardCanvas : Control
     public override void _Draw()
     {
         DrawRect(new Rect2(Vector2.Zero, Size), _backdrop, true);
-        if (_board?.IsReadOnly != true)
+        // The trash only appears while something is being dragged, so the
+        // canvas stays clean the rest of the time.
+        if (_board?.IsReadOnly != true && SlotHint)
         {
             DrawTrash();
         }
+        DrawZoomBadge();
+    }
+
+    /// <summary>Bottom-right zoom percentage so the current scale is never a mystery.</summary>
+    private void DrawZoomBadge()
+    {
+        var font = ThemeDB.FallbackFont;
+        var text = Mathf.RoundToInt((_board?.Zoom ?? 1f) * 100f) + "%";
+        var size = font.GetStringSize(text, HorizontalAlignment.Left, -1, 11);
+        var rect = new Rect2(Size.X - size.X - 26f, Size.Y - 30f, size.X + 14f, 20f);
+        _zoomStyle.BgColor = Color.FromHtml("171a20cc");
+        _zoomStyle.BorderColor = UiStyle.PanelBorder;
+        _zoomStyle.SetBorderWidthAll(1);
+        _zoomStyle.SetCornerRadiusAll(6);
+        DrawStyleBox(_zoomStyle, rect);
+        DrawString(font, rect.Position + new Vector2(7, 14), text,
+            HorizontalAlignment.Left, -1, 11, UiStyle.TextDim);
     }
 
     private void DrawTrash()
     {
         var rect = TrashRect;
-        var hovering = SlotHint && rect.HasPoint(GetLocalMousePosition());
+        var hovering = rect.HasPoint(GetLocalMousePosition());
         _trashStyle.BgColor = hovering ? Color.FromHtml("5a2626") : Color.FromHtml("241d1f");
         _trashStyle.BorderColor = hovering ? Color.FromHtml("e06c5f") : Color.FromHtml("4a3a3d");
         _trashStyle.SetBorderWidthAll(hovering ? 2 : 1);
@@ -126,12 +146,14 @@ public partial class BoardCanvas : Control
         _nodeMenu.AddItem(ModLocalization.T("node_detach_region", "Detach from turn region"), MenuDetachRegion);
         _nodeMenu.AddItem(ModLocalization.T("node_delete", "Delete node"), MenuDelete);
         _nodeMenu.IdPressed += OnNodeMenuId;
+        UiStyle.StylePopup(_nodeMenu);
         AddChild(_nodeMenu);
 
         _edgeMenu = new PopupMenu { Name = "EdgeMenu" };
         _edgeMenu.AddItem(ModLocalization.T("edge_edit", "Edit condition…"), EdgeEdit);
         _edgeMenu.AddItem(ModLocalization.T("edge_delete", "Delete branch"), EdgeDelete);
         _edgeMenu.IdPressed += OnEdgeMenuId;
+        UiStyle.StylePopup(_edgeMenu);
         AddChild(_edgeMenu);
 
         _canvasMenu = new PopupMenu { Name = "CanvasMenu" };
@@ -139,12 +161,14 @@ public partial class BoardCanvas : Control
         _canvasMenu.AddItem(ModLocalization.T("world_line_new", "+ World line"), CanvasNewWorldLine);
         _canvasMenu.AddItem(ModLocalization.T("canvas_reset", "Reset view"), CanvasResetView);
         _canvasMenu.IdPressed += OnCanvasMenuId;
+        UiStyle.StylePopup(_canvasMenu);
         AddChild(_canvasMenu);
 
         _regionMenu = new PopupMenu { Name = "RegionMenu" };
         _regionMenu.AddItem(ModLocalization.T("region_clear", "Clear this turn"), RegionClear);
         _regionMenu.AddItem(ModLocalization.T("region_delete", "Delete this turn region"), RegionDelete);
         _regionMenu.IdPressed += OnRegionMenuId;
+        UiStyle.StylePopup(_regionMenu);
         AddChild(_regionMenu);
 
         _editor = new NoteEditDialog { Name = "NoteEditor" };
@@ -268,6 +292,13 @@ public partial class BoardCanvas : Control
                 _panning = button.Pressed;
                 AcceptEvent();
             }
+            else if (!button.Pressed && button.ButtonIndex == MouseButton.Left && IsLinking)
+            {
+                // A link drag released over empty canvas must not leave the
+                // dashed preview hanging: complete (= cancel if no target).
+                CompleteLink();
+                AcceptEvent();
+            }
             else if (button.Pressed && button.ButtonIndex == MouseButton.Right)
             {
                 if (_board.IsReadOnly)
@@ -276,16 +307,24 @@ public partial class BoardCanvas : Control
                     return;
                 }
                 var surfacePosition = _surface.GetLocalMousePosition();
-                var region = _board.TurnRegions.FirstOrDefault(r =>
-                    new Rect2(r.X, r.Y, r.Width, r.Height).HasPoint(surfacePosition));
-                if (region != null)
+                if (_surface.TryGetEdgeNear(surfacePosition, 10f, out var edgeId))
                 {
-                    _menuRegionId = region.Id;
-                    _regionMenu.Popup(new Rect2I((Vector2I)GetGlobalMousePosition(), Vector2I.Zero));
+                    _menuEdgeId = edgeId;
+                    _edgeMenu.Popup(new Rect2I((Vector2I)GetGlobalMousePosition(), Vector2I.Zero));
                 }
                 else
                 {
-                    _canvasMenu.Popup(new Rect2I((Vector2I)GetGlobalMousePosition(), Vector2I.Zero));
+                    var region = _board.TurnRegions.FirstOrDefault(r =>
+                        new Rect2(r.X, r.Y, r.Width, r.Height).HasPoint(surfacePosition));
+                    if (region != null)
+                    {
+                        _menuRegionId = region.Id;
+                        _regionMenu.Popup(new Rect2I((Vector2I)GetGlobalMousePosition(), Vector2I.Zero));
+                    }
+                    else
+                    {
+                        _canvasMenu.Popup(new Rect2I((Vector2I)GetGlobalMousePosition(), Vector2I.Zero));
+                    }
                 }
                 AcceptEvent();
             }
@@ -305,12 +344,7 @@ public partial class BoardCanvas : Control
                     AcceptEvent();
                     return;
                 }
-                if (_surface.TryGetEdgeNear(local, 10f, out var edgeId))
-                {
-                    _menuEdgeId = edgeId;
-                    _edgeMenu.Popup(new Rect2I((Vector2I)GetGlobalMousePosition(), Vector2I.Zero));
-                }
-                else if (TryGetRegionAt(local, out var regionId))
+                if (TryGetRegionAt(local, out var regionId))
                 {
                     NotesRuntime.SelectRegion(regionId);
                 }
