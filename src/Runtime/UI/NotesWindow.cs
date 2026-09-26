@@ -110,6 +110,7 @@ public partial class NotesWindow : Control
             FocusMode = FocusModeEnum.None,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
+        UiStyle.StyleOptionButton(_boardPicker);
         _boardPicker.ItemSelected += OnBoardSelected;
         header.AddChild(_boardPicker);
 
@@ -335,8 +336,11 @@ public partial class NotesWindow : Control
         }
         if (key.Keycode == Key.Escape)
         {
-            if (_canvas.LinkMode)
+            if (_canvas.LinkMode || _canvas.IsLinking)
             {
+                // Cancel any pending link before leaving; otherwise a hidden
+                // window keeps an armed link that fires on the next click.
+                _canvas.CancelLink();
                 _linkButton.ButtonPressed = false;
             }
             else
@@ -540,9 +544,10 @@ public partial class NotesWindow : Control
                     break;
             }
         }
-        catch
+        catch (Exception ex)
         {
             // inspector is informational only
+            MegaCrit.Sts2.Core.Logging.Log.Error("[Notes] inspector refresh failed: " + ex);
         }
     }
 

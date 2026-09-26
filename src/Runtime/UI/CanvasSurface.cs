@@ -404,10 +404,15 @@ public partial class CanvasSurface : Control
         var title = ModLocalization.T("region_turn", "回合") + " " + region.TurnNumber;
         DrawString(font, new Vector2(region.X + 12, region.Y + 26), title, HorizontalAlignment.Left, -1, 13, color);
 
-        var chipEvents = region.TurnEvents.Where(e => !UiStyle.IsBoundaryAnnotation(e.RefId)).Take(3).ToList();
+        var allChips = region.TurnEvents.Where(e => !UiStyle.IsBoundaryAnnotation(e.RefId)).ToList();
+        var chipEvents = allChips.Take(3).ToList();
         if (chipEvents.Count > 0)
         {
             var text = string.Join(" · ", chipEvents.Select(e => UiStyle.AnnotationText(e)));
+            if (allChips.Count > chipEvents.Count)
+            {
+                text += "  +" + (allChips.Count - chipEvents.Count);
+            }
             var size = font.GetStringSize(text, HorizontalAlignment.Left, -1, 10);
             var box = new Rect2(region.X + region.Width - size.X - 24, region.Y + 10, size.X + 12, 18);
             _labelBox.BgColor = UiStyle.BadgeBg;
@@ -512,15 +517,21 @@ public partial class CanvasSurface : Control
             ? UiStyle.EdgeDefault
             : UiStyle.StateColor(target.State);
         var dashed = target?.State == NodeState.Speculated;
+        var hovered = _canvas.HoverEdgeId == edge.Id;
+        if (hovered)
+        {
+            color = color.Lightened(0.3f);
+        }
+        var width = hovered ? 3.6f : 2.2f;
 
         var points = CurvePoints(edge);
         if (dashed)
         {
-            DrawDashedPolyline(points, color, 2.2f, 9f, 6f);
+            DrawDashedPolyline(points, color, width, 9f, 6f);
         }
         else
         {
-            DrawPolyline(points.ToArray(), color, 2.2f, true);
+            DrawPolyline(points.ToArray(), color, width, true);
         }
 
         var endDirection = (points[^1] - points[^2]).Normalized();

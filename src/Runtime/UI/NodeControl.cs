@@ -22,6 +22,7 @@ public partial class NodeControl : Control
     private bool _hoverPort;
     private bool _dragging;
     private bool _moved;
+    private bool _linkHandledOnPress;
     private Vector2 _grabOffset;
     private Vector2 _startNodePosition;
 
@@ -71,7 +72,12 @@ public partial class NodeControl : Control
     public void UpdateFrom(NotesNode node)
     {
         _node = node;
-        Position = new Vector2(node.X, node.Y);
+        // While the player drags this control, keep it under the cursor: a
+        // mid-drag model refresh (layout / auto-capture) must not snap it back.
+        if (!_dragging)
+        {
+            Position = new Vector2(node.X, node.Y);
+        }
         UpdateTooltip();
         QueueRedraw();
     }
@@ -238,6 +244,7 @@ public partial class NodeControl : Control
                 if (_canvas.LinkMode)
                 {
                     _canvas.LinkClick(_node.Id);
+                    _linkHandledOnPress = true; // do not complete again on release
                     AcceptEvent();
                     return;
                 }
@@ -258,8 +265,20 @@ public partial class NodeControl : Control
             }
             else if (button.ButtonIndex == MouseButton.Left && !button.Pressed)
             {
+                if (_linkHandledOnPress)
+                {
+                    // Link-mode pick/connect already happened on press.
+                    _linkHandledOnPress = false;
+                    AcceptEvent();
+                    return;
+                }
                 if (_canvas.IsLinking)
                 {
+                    // Finishing a link armed by the port or "Link from here":
+                    // never leave drag state behind (phantom drag).
+                    _dragging = false;
+                    _moved = false;
+                    _canvas.CancelNodeDrag();
                     _canvas.CompleteLink();
                     AcceptEvent();
                     return;

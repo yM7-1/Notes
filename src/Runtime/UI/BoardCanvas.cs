@@ -64,6 +64,9 @@ public partial class BoardCanvas : Control
 
     public bool SlotHint => _dragActive || _dragNode != null;
 
+    /// <summary>Branch under the mouse (hover highlight); empty when none.</summary>
+    public string HoverEdgeId { get; private set; } = "";
+
     public void SetBackdrop(Color color)
     {
         _backdrop = color;
@@ -176,6 +179,14 @@ public partial class BoardCanvas : Control
 
         NotesRuntime.Changed += OnRuntimeChanged;
         NotesRuntime.SelectionChanged += OnSelectionChanged;
+        MouseExited += () =>
+        {
+            if (HoverEdgeId.Length > 0)
+            {
+                HoverEdgeId = "";
+                _surface.QueueRedraw();
+            }
+        };
         OnRuntimeChanged();
     }
 
@@ -225,6 +236,10 @@ public partial class BoardCanvas : Control
         if (_dragNode != null && _board?.FindNode(_dragNode) == null)
         {
             _dragNode = null;
+        }
+        if (HoverEdgeId.Length > 0 && _board?.FindEdge(HoverEdgeId) == null)
+        {
+            HoverEdgeId = "";
         }
         if (sameBoard)
         {
@@ -366,6 +381,17 @@ public partial class BoardCanvas : Control
             _board.PanY = _surface.Position.Y;
             NotesRuntime.ScheduleSave();
             AcceptEvent();
+        }
+        else if (@event is InputEventMouseMotion)
+        {
+            var hovered = _surface.TryGetEdgeNear(_surface.GetLocalMousePosition(), 8f, out var edgeId)
+                ? edgeId
+                : "";
+            if (hovered != HoverEdgeId)
+            {
+                HoverEdgeId = hovered;
+                _surface.QueueRedraw();
+            }
         }
     }
 
@@ -655,6 +681,15 @@ public partial class BoardCanvas : Control
         _surface.QueueRedraw();
     }
 
+    /// <summary>Drops the drag hint without moving / re-slotting the node
+    /// (used when a release was consumed by the link flow).</summary>
+    public void CancelNodeDrag()
+    {
+        _dragNode = null;
+        _surface.QueueRedraw();
+        QueueRedraw();
+    }
+
     public void EndNodeDrag(string nodeId, Vector2 startPosition, Vector2 currentPosition, bool moved)
     {
         _dragNode = null;
@@ -807,10 +842,12 @@ public partial class BoardCanvas : Control
             NotesRuntime.Raise();
             return;
         }
+        var from = _linkFrom;
+        _linkFrom = null;
         var edge = new NotesEdge
         {
             Id = IdFactory.NewEdgeId(),
-            From = _linkFrom,
+            From = from,
             To = nodeId,
         };
         NotesRuntime.Commands.Execute(new AddEdgeCommand(NotesRuntime.ActiveDocument, _board.Id, edge));
@@ -1093,6 +1130,10 @@ public partial class BoardCanvas : Control
                 var commands = _board.NodesOfRegion(region.Id)
                     .Select(node => (INotesCommand)new RemoveNodeCommand(document, _board.Id, node.Id))
                     .ToList();
+                if (region.TurnEvents.Count > 0)
+                {
+                    commands.Add(new ClearRegionEventsCommand(document, _board.Id, region.Id));
+                }
                 if (commands.Count > 0)
                 {
                     NotesRuntime.Commands.Execute(new CompositeCommand(commands, "ClearRegion"));

@@ -240,7 +240,8 @@ internal static class NotesRuntime
     }
 
     /// <summary>Run-scoped data is cheap to write (in-memory bag), so flush it
-    /// immediately: a later save/quit-to-menu then always contains our notes.</summary>
+    /// immediately: a later save/quit-to-menu then always contains our notes.
+    /// The dirty flag is only cleared once the write actually succeeded.</summary>
     private static void FlushRunIfPossible()
     {
         if (!_runDirty)
@@ -252,8 +253,10 @@ internal static class NotesRuntime
         {
             return;
         }
-        NotesPersistence.SaveRun(run, RunDocument, NotesOpLog.Entries, _combatKey);
-        _runDirty = false;
+        if (NotesPersistence.SaveRun(run, RunDocument, NotesOpLog.Entries, _combatKey))
+        {
+            _runDirty = false;
+        }
     }
 
     /// <summary>Marks the active library dirty without rebuilding the UI
@@ -386,15 +389,18 @@ internal static class NotesRuntime
         if (_runDirty)
         {
             var run = GameContext.CurrentRun;
-            if (run != null)
+            if (run == null)
             {
-                NotesPersistence.SaveRun(run, RunDocument, NotesOpLog.Entries, _combatKey);
+                // Nothing left to write to; the document is discarded with the run.
+                _runDirty = false;
             }
-            _runDirty = false;
+            else if (NotesPersistence.SaveRun(run, RunDocument, NotesOpLog.Entries, _combatKey))
+            {
+                _runDirty = false;
+            }
         }
-        if (_globalDirty)
+        if (_globalDirty && NotesPersistence.SaveGlobal(GlobalDocument))
         {
-            NotesPersistence.SaveGlobal(GlobalDocument);
             _globalDirty = false;
         }
     }
@@ -694,6 +700,12 @@ internal static class NotesRuntime
         var commands = new List<INotesCommand>();
         foreach (var importedTurn in turns)
         {
+            var existingRegion = board.TurnRegions.FirstOrDefault(r =>
+                r.WorldLineId == line.Id && r.TurnNumber == importedTurn);
+            if (existingRegion == null)
+            {
+                commands.Add(new AddTurnRegionCommand(document, board.Id, line.Id, importedTurn));
+            }
             var region = document.EnsureTurnRegion(board.Id, line.Id, importedTurn);
             commands.AddRange(NotesImporter.BuildCommands(document, board, region, ops, replaceImported: true));
             var last = ops
@@ -702,9 +714,10 @@ internal static class NotesRuntime
                 .LastOrDefault();
             if (last != null)
             {
-                region.Snapshot = last.Snapshot;
-                region.Hp = last.Hp;
-                region.MaxHp = last.MaxHp;
+                commands.Add(new UpdateTurnRegionCommand(
+                    document, board.Id, region.Id,
+                    region.Snapshot, region.Hp, region.MaxHp,
+                    last.Snapshot, last.Hp, last.MaxHp));
             }
         }
         if (commands.Count > 0)
@@ -771,6 +784,20 @@ internal static class NotesRuntime
     public static void ClearOps()
     {
         NotesOpLog.Clear();
+        // The read-only current line is derived from the op log: drop the
+        // captured chips / end-of-turn state with it, otherwise the board keeps
+        // showing data whose ops no longer exist.
+        var board = CurrentBoard();
+        if (board != null)
+        {
+            foreach (var region in board.TurnRegions)
+            {
+                region.TurnEvents.Clear();
+                region.Snapshot = "";
+                region.Hp = -1;
+                region.MaxHp = -1;
+            }
+        }
         MarkDirty();
         RefreshCurrentBoard();
         OpsChanged?.Invoke();

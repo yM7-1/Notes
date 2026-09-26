@@ -88,9 +88,9 @@
   "annot_exhaust": "Exhausted {0}",
   "annot_exhaust_fmt": "Exhausted: {0}",
   "annot_loss": "Damage taken: {0}",
-  "annot_damage": "「{0}」 dealt {2} damage to {1}",
-  "annot_damage_kill": "「{0}」 dealt {2} damage to {1} and killed it",
-  "annot_insert": "【{0}】 adds 【{1}】 to 【{2}】",
+  "annot_damage": "{0} dealt {2} damage to {1}",
+  "annot_damage_kill": "{0} dealt {2} damage to {1} and killed it",
+  "annot_insert": "{0} adds {1} to the {2}",
   "annot_copies": "{0}*{1}",
   "pile_draw": "draw pile",
   "pile_discard": "discard pile",
@@ -161,5 +161,6 @@
   "empty_current_title": "Nothing recorded yet",
   "empty_current_hint": "Combat actions show up here automatically",
   "empty_board_title": "Empty board",
-  "empty_board_hint": "Drag a card from the right, or hit “Record turn”"
+  "empty_board_hint": "Drag a card from the right, or hit “Record turn”",
+  "palette_upgrade_tip": "Right-click toggles upgraded +"
 }

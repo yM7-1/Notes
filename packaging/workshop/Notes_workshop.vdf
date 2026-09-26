@@ -43,6 +43,6 @@
 
 [h2]English[/h2]
 In-combat world-line notebook for Slay the Spire 2. Your current world line is auto-recorded: every card, potion, draw/discard/exhaust and end-of-turn step, with the hand you had, the state at that moment, targets and damage dealt, numbered same-name enemies, and between-turn notes (enemy card insertions, HP lost). Copy it into an editable world-line board to branch, speculate and annotate. Requires RitsuLib ≥ 0.6.2."
-	"changenote"        "v0.6.2：修复「记本回合」追加不覆盖（改为整体重建该回合）；修复新画板拖动图例不显示下一步槽位；节点上拖放更顺手。"
+	"changenote"        "v0.7.0：界面美化与体验优化（两行工具栏/窗口可拖动/深色统一/节点投影/空板引导/缩放指示）；修复点击式连线、幽灵拖动、清空日志残留、撤销导入快照等问题；单测 42 个"
 	"visibility"		"0"
 }

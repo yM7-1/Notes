@@ -161,5 +161,6 @@
   "empty_current_title": "本回合暂无记录",
   "empty_current_hint": "战斗中的操作会自动记录在这里",
   "empty_board_title": "空画板",
-  "empty_board_hint": "从右侧拖入卡牌，或点「记本回合」录入本回合"
+  "empty_board_hint": "从右侧拖入卡牌，或点「记本回合」录入本回合",
+  "palette_upgrade_tip": "右键切换升级 +"
 }

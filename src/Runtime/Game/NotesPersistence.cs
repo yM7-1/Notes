@@ -149,7 +149,9 @@ internal static class NotesPersistence
         return new NotesDocument();
     }
 
-    public static void SaveRun(
+    /// <summary>Writes the run notes; false when the write failed and the caller
+    /// should keep the data dirty so a later debounce retries it.</summary>
+    public static bool SaveRun(
         RunState state,
         NotesDocument document,
         IReadOnlyList<NotesOpData> ops,
@@ -167,7 +169,7 @@ internal static class NotesPersistence
             var json = JsonSerializer.Serialize(payload, NotesJson.Options);
             if (json == _lastWrittenJson)
             {
-                return;
+                return true; // already on disk
             }
             var path = RunFilePath;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -175,10 +177,12 @@ internal static class NotesPersistence
             File.WriteAllText(tmp, json);
             File.Move(tmp, path, overwrite: true);
             _lastWrittenJson = json;
+            return true;
         }
         catch (Exception ex)
         {
             Log.Error("[Notes] run notes save failed: " + ex);
+            return false;
         }
     }
 
@@ -237,16 +241,24 @@ internal static class NotesPersistence
         return false;
     }
 
-    public static void SaveGlobal(NotesDocument document)
+    /// <summary>Saves the global library; false when the store is not ready or
+    /// the write failed (caller keeps it dirty and retries).</summary>
+    public static bool SaveGlobal(NotesDocument document)
     {
         try
         {
-            _globalStore?.Modify<NotesGlobalData>(GlobalKey, data => data.Document = document);
-            _globalStore?.Save(GlobalKey);
+            if (_globalStore == null)
+            {
+                return false;
+            }
+            _globalStore.Modify<NotesGlobalData>(GlobalKey, data => data.Document = document);
+            _globalStore.Save(GlobalKey);
+            return true;
         }
         catch (Exception ex)
         {
             Log.Error("[Notes] global data save failed: " + ex);
+            return false;
         }
     }
 

@@ -63,6 +63,13 @@ public partial class NoteEditDialog : AcceptDialog
             ? ModLocalization.T("dialog_title_label", "Title")
             : ModLocalization.T("dialog_label_label", "Condition (optional)");
         PopupCentered(new Vector2I(420, allowNote ? 320 : 180));
+        // Ready to type immediately: focus the field and preselect the
+        // prefilled title so typing replaces it.
+        Callable.From(() =>
+        {
+            _title.GrabFocus();
+            _title.SelectAll();
+        }).CallDeferred();
     }
 
     private void OnConfirmed()

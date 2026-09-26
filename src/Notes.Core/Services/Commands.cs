@@ -298,6 +298,101 @@ public sealed class RemoveBoardCommand : INotesCommand
     }
 }
 
+/// <summary>Updates a turn region's end-of-turn state (snapshot / HP) so an
+/// import can be undone back to the previous state.</summary>
+public sealed class UpdateTurnRegionCommand : INotesCommand
+{
+    private readonly NotesDocument _doc;
+    private readonly string _boardId;
+    private readonly string _regionId;
+    private readonly string _beforeSnapshot;
+    private readonly string _afterSnapshot;
+    private readonly int _beforeHp;
+    private readonly int _afterHp;
+    private readonly int _beforeMaxHp;
+    private readonly int _afterMaxHp;
+
+    public UpdateTurnRegionCommand(
+        NotesDocument doc,
+        string boardId,
+        string regionId,
+        string beforeSnapshot,
+        int beforeHp,
+        int beforeMaxHp,
+        string afterSnapshot,
+        int afterHp,
+        int afterMaxHp)
+    {
+        _doc = doc;
+        _boardId = boardId;
+        _regionId = regionId;
+        _beforeSnapshot = beforeSnapshot;
+        _afterSnapshot = afterSnapshot;
+        _beforeHp = beforeHp;
+        _afterHp = afterHp;
+        _beforeMaxHp = beforeMaxHp;
+        _afterMaxHp = afterMaxHp;
+    }
+
+    public string Name => "UpdateTurnRegion";
+
+    public void Do() => Apply(_afterSnapshot, _afterHp, _afterMaxHp);
+
+    public void Undo() => Apply(_beforeSnapshot, _beforeHp, _beforeMaxHp);
+
+    private void Apply(string snapshot, int hp, int maxHp)
+    {
+        var region = _doc.FindBoard(_boardId)?.FindRegion(_regionId);
+        if (region == null)
+        {
+            return;
+        }
+        region.Snapshot = snapshot;
+        region.Hp = hp;
+        region.MaxHp = maxHp;
+    }
+}
+
+/// <summary>Clears a turn region's captured event chips (undo-able).</summary>
+public sealed class ClearRegionEventsCommand : INotesCommand
+{
+    private readonly NotesDocument _doc;
+    private readonly string _boardId;
+    private readonly string _regionId;
+    private List<NotesAnnotation> _events = new();
+
+    public ClearRegionEventsCommand(NotesDocument doc, string boardId, string regionId)
+    {
+        _doc = doc;
+        _boardId = boardId;
+        _regionId = regionId;
+    }
+
+    public string Name => "ClearRegionEvents";
+
+    public void Do()
+    {
+        var region = _doc.FindBoard(_boardId)?.FindRegion(_regionId);
+        if (region == null)
+        {
+            return;
+        }
+        _events = region.TurnEvents.Select(a => a.Clone()).ToList();
+        region.TurnEvents.Clear();
+    }
+
+    public void Undo()
+    {
+        var region = _doc.FindBoard(_boardId)?.FindRegion(_regionId);
+        if (region == null)
+        {
+            return;
+        }
+        region.TurnEvents.Clear();
+        region.TurnEvents.AddRange(_events.Select(a => a.Clone()));
+    }
+}
+
 /// <summary>Runs several commands as one undo step (auto-import batches).</summary>
 public sealed class CompositeCommand : INotesCommand
 {

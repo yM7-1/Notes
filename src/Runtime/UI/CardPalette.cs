@@ -24,6 +24,8 @@ public partial class CardPalette : PanelContainer
     private OptionButton _typeFilter = null!;
     private Label _header = null!;
     private VBoxContainer _rows = null!;
+    private ScrollContainer _scroll = null!;
+    private int _pendingScroll;
     private readonly HashSet<string> _upgradedKeys = new(StringComparer.Ordinal);
     private double _timer;
     private string _signature = "";
@@ -58,6 +60,7 @@ public partial class CardPalette : PanelContainer
         _filters.AddThemeConstantOverride("separation", 4);
         root.AddChild(_filters);
         _costFilter = new OptionButton { FocusMode = FocusModeEnum.None, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        UiStyle.StyleOptionButton(_costFilter, fontSize: 11);
         _costFilter.AddItem(ModLocalization.T("filter_all", "All"));
         _costFilter.AddItem("0");
         _costFilter.AddItem("1");
@@ -66,6 +69,7 @@ public partial class CardPalette : PanelContainer
         _costFilter.ItemSelected += _ => Refresh(force: true);
         _filters.AddChild(_costFilter);
         _typeFilter = new OptionButton { FocusMode = FocusModeEnum.None, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        UiStyle.StyleOptionButton(_typeFilter, fontSize: 11);
         _typeFilter.AddItem(ModLocalization.T("filter_all", "All"));
         _typeFilter.AddItem(ModLocalization.T("type_attack", "Attack"));
         _typeFilter.AddItem(ModLocalization.T("type_skill", "Skill"));
@@ -83,6 +87,7 @@ public partial class CardPalette : PanelContainer
             SizeFlagsVertical = SizeFlags.ExpandFill,
             CustomMinimumSize = new Vector2(0, 160),
         };
+        _scroll = scroll;
         root.AddChild(scroll);
         _rows = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _rows.AddThemeConstantOverride("separation", 2);
@@ -125,6 +130,8 @@ public partial class CardPalette : PanelContainer
         _codexTab.ButtonPressed = tab == Tab.Codex;
         _search.Visible = tab == Tab.Codex;
         _filters.Visible = tab == Tab.Codex;
+        _pendingScroll = 0;
+        _scroll.ScrollVertical = 0;
         Refresh(force: true);
     }
 
@@ -142,6 +149,7 @@ public partial class CardPalette : PanelContainer
                 RefreshCodex();
                 break;
         }
+        RestoreScroll();
     }
 
     private void RefreshHand(bool force)
@@ -273,13 +281,14 @@ public partial class CardPalette : PanelContainer
         row.Pressed += () => CardActivated?.Invoke(snapshot);
         if (key != null)
         {
+            row.TooltipText += "\n" + ModLocalization.T("palette_upgrade_tip", "Right-click toggles upgraded +");
             row.RightClicked += () =>
             {
                 if (!_upgradedKeys.Remove(key))
                 {
                     _upgradedKeys.Add(key);
                 }
-                RefreshCodex();
+                Refresh(force: true);
             };
         }
         return row;
@@ -298,10 +307,22 @@ public partial class CardPalette : PanelContainer
 
     private void ClearRows()
     {
+        _pendingScroll = _scroll.ScrollVertical;
         foreach (var child in _rows.GetChildren())
         {
             _rows.RemoveChild(child);
             child.QueueFree();
+        }
+    }
+
+    /// <summary>Restores the scroll offset after a rebuild once the new rows
+    /// have been laid out (avoids jumping back to the top on every refresh).</summary>
+    private void RestoreScroll()
+    {
+        if (_pendingScroll > 0)
+        {
+            _scroll.SetDeferred(ScrollContainer.PropertyName.ScrollVertical, _pendingScroll);
+            _pendingScroll = 0;
         }
     }
 }
@@ -321,9 +342,16 @@ public partial class DragCardButton : Button
         _speculated = speculated;
         _count = count;
         Text = $"{snapshot.CostText} · {snapshot.DisplayTitle}" + (count > 1 ? $" ×{count}" : "");
-        TooltipText = snapshot.RefId + (speculated
-            ? "\n" + Game.ModLocalization.T("palette_speculated_tip", "Drag adds a speculated legend")
-            : "");
+        var lines = new List<string> { snapshot.DisplayTitle };
+        if (snapshot.Cost >= 0)
+        {
+            lines.Add(Game.ModLocalization.T("inspector_cost", "Cost") + ": " + snapshot.CostText);
+        }
+        if (speculated)
+        {
+            lines.Add(Game.ModLocalization.T("palette_speculated_tip", "Drag adds a speculated legend"));
+        }
+        TooltipText = string.Join("\n", lines);
         Alignment = HorizontalAlignment.Left;
         CustomMinimumSize = new Vector2(0, 26);
         UiStyle.StyleRow(this);

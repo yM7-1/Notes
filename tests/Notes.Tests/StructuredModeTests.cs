@@ -27,6 +27,103 @@ public class StructuredModeTests
     }
 
     [Fact]
+    public void ClearRegionEventsCommand_ClearsAndRestores()
+    {
+        var (doc, board, line) = NewStructured();
+        var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
+        region.TurnEvents.Add(new NotesAnnotation { RefId = "loss:1", Text = "", Count = 7 });
+        var command = new ClearRegionEventsCommand(doc, board.Id, region.Id);
+
+        command.Do();
+        Assert.Empty(region.TurnEvents);
+
+        command.Undo();
+        var restored = Assert.Single(region.TurnEvents);
+        Assert.Equal("loss:1", restored.RefId);
+        Assert.Equal(7, restored.Count);
+    }
+
+    [Fact]
+    public void Apply_ShrinkingOps_RemovesStaleNodeAndItsEdges()
+    {
+        var (doc, board, line) = NewStructured();
+        var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
+        var ops = new List<NotesOpData>
+        {
+            new() { Id = "op1", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 1, Title = "Strike" },
+            new() { Id = "op2", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 2, Title = "Defend" },
+            new() { Id = "op3", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 3, Title = "Bash" },
+        };
+        NotesImporter.Apply(doc, board, region, ops);
+        var byOp = board.NodesOfRegion(region.Id).ToDictionary(n => n.SourceOpId, StringComparer.Ordinal);
+        var idOf = byOp.ToDictionary(p => p.Key, p => p.Value.Id, StringComparer.Ordinal);
+        Assert.Equal(2, board.EdgesOfRegion(region.Id).Count());
+
+        // Drop the middle op: its node and both attached edges disappear,
+        // surviving nodes keep their ids (stable UI).
+        NotesImporter.Apply(doc, board, region, new List<NotesOpData> { ops[0], ops[2] });
+
+        var remaining = board.NodesOfRegion(region.Id).ToList();
+        Assert.Equal(2, remaining.Count);
+        Assert.DoesNotContain(remaining, n => n.SourceOpId == "op2");
+        Assert.Contains(remaining, n => n.Id == idOf["op1"]);
+        Assert.Contains(remaining, n => n.Id == idOf["op3"]);
+        Assert.DoesNotContain(board.Edges, e => e.To == idOf["op2"] || e.From == idOf["op2"]);
+        Assert.Equal(1, board.EdgesOfRegion(region.Id).Count()); // op1 -> op3
+    }
+
+    [Fact]
+    public void Apply_ReplacedOpId_RecreatesNodeAndRepointsEdges()
+    {
+        var (doc, board, line) = NewStructured();
+        var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
+        NotesImporter.Apply(doc, board, region, new List<NotesOpData>
+        {
+            new() { Id = "op1", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 1, Title = "Strike" },
+            new() { Id = "op2", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 2, Title = "Defend" },
+        });
+        var firstId = board.NodesOfRegion(region.Id).Single(n => n.SourceOpId == "op1").Id;
+
+        // The same logical step comes back under a new op id: the edge must be
+        // re-pointed to the recreated node instead of dangling.
+        NotesImporter.Apply(doc, board, region, new List<NotesOpData>
+        {
+            new() { Id = "op1", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 1, Title = "Strike" },
+            new() { Id = "op2b", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 2, Title = "Defend" },
+        });
+
+        var nodes = board.NodesOfRegion(region.Id).ToList();
+        Assert.Equal(2, nodes.Count);
+        Assert.DoesNotContain(nodes, n => n.SourceOpId == "op2");
+        var newId = nodes.Single(n => n.SourceOpId == "op2b").Id;
+        Assert.Contains(nodes, n => n.Id == firstId);
+        var edge = Assert.Single(board.EdgesOfRegion(region.Id));
+        Assert.Equal(firstId, edge.From);
+        Assert.Equal(newId, edge.To);
+    }
+
+    [Fact]
+    public void UpdateTurnRegionCommand_RoundTripsSnapshotAndHp()
+    {
+        var (doc, board, line) = NewStructured();
+        var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
+        region.Snapshot = "old";
+        region.Hp = 30;
+        region.MaxHp = 70;
+        var command = new UpdateTurnRegionCommand(
+            doc, board.Id, region.Id, "old", 30, 70, "new", 22, 70);
+
+        command.Do();
+        Assert.Equal("new", region.Snapshot);
+        Assert.Equal(22, region.Hp);
+
+        command.Undo();
+        Assert.Equal("old", region.Snapshot);
+        Assert.Equal(30, region.Hp);
+        Assert.Equal(70, region.MaxHp);
+    }
+
+    [Fact]
     public void RemoveTurnRegion_CascadesStructuredNodesAndEdges()
     {
         var (doc, board, line) = NewStructured();
