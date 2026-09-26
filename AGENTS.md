@@ -13,6 +13,44 @@
 - **不要自动上传/更新创意工坊**：任何工坊更新前必须先询问用户。上传流程见 `steam-workshop-upload` skill。
 - 三处版本号需同步：`Notes.csproj`、`Notes.json`、`packaging/workshop/content/Notes/Notes.json`。
 
+## 交接状态（2026-09-26，新会话从这里开始）
+
+### 当前进度
+- **版本 v0.8.0，已上架创意工坊**（ID `3808343573`，线上 changelog 已验证 v0.8.0）。
+  仓库 HEAD = `2e873b2`（第二轮 5-8 轮 + v0.8.0），前一批 = `e57c4e6`，均已 push。
+- 两轮自动迭代共 18 轮全部完成、0 受阻：v0.7.0（UX/UI 大波 + 链接/数据修复，10 轮）、
+  v0.8.0（安全/数据完整性 + 新玩家引导 + 性能/结构，8 轮）。
+- 单测 45 个；`bash tools/check.sh` 现在会校验三处版本号 + VDF changenote 含版本号。
+- **游戏当前跑的是工坊订阅版**；本地 `mods/Notes` 已删除（避免 DUPLICATE_ID），
+  要实机验证必须更新工坊（先问用户）或临时本地部署并退订。
+
+### 未完成（backlog，`bash tools/check.sh` 之外的下一批候选）
+1. `NotesJson.Normalize` 重复 ID 只改自身、不重映射引用（损坏/合并存档会错位并回写）
+2. `LastImportMessage` 过期不清理（旧提示长期挂在状态栏）
+3. `tools/publish.sh` 硬编码 `v0.1.0` tag，重跑会推错标签
+4. BoardCanvas 拆分（1150 行 god object；交互/菜单/放置逻辑混在一起）
+5. 注释协议统一（`relic:/damage:/insert:` 分散在 NotesOpLog / UiStyle / Core 三层）
+6. 世界线创建（`+ World line` / `复制→新线`）不走命令栈 → 无法 Ctrl+Z
+7. `CardCatalog` 构建失败会缓存空列表 → 该局图鉴永久为空
+8. 删除画板确认框在确认时才取活动画板（极端情况可能删错板）
+9. 细节：折叠箭头 tooltip 仍是「世界线笔记 (F8)」；图鉴行整表重建（已去抖未复用）；
+   手柄导航未实测（Tab 键盘可用）
+
+### 关键注意事项（本轮踩过的坑）
+- 工坊上传：`/mnt/d/steamcmd/steamcmd.exe +login lwh4646 +workshop_build_item 'D:\0_git\Notes\packaging\workshop\Notes_workshop.vdf' +quit`；
+  超时一次属常见，直接重试；上传后等 ~15s 再用 `curl.exe -x http://127.0.0.1:7897` 验证 changelog。
+- 发布物料：改版本号后 `check.sh` 会强制校验 VDF changenote 含 `v<版本>`；上传前把
+  `.godot/mono/temp/bin/Release/Notes.dll` 拷到 `packaging/workshop/content/Notes/Notes.dll`。
+- autopilot 提交器会把暂存中的工坊 DLL 报成 "Secret-like content"（二进制不可扫描），
+  提交时需加 `--allow-secrets`（该 DLL 是本仓库构建产物，已确认安全）。
+- 存档：`/mnt/c/Users/Admin/AppData/Roaming/SlayTheSpire2/Notes/run_notes.json`；
+  损坏/新版本会被隔离为 `run_notes.json.corrupt-<ts>` 并新建空档（状态栏提示）。
+- 全局库：RitsuLib key `boards` / file `notes_boards`（Profile scope，`syncToCloud:false`），
+  经 `ModDataStoreCache` 读取（档案切换自动重载）。
+- 迭代工具状态：`.autopilot/`（config/state/backlog/reports 均在此，已 gitignore）。
+  恢复方式：`config-set --max-rounds N` 后 `init --force`（会保留 backlog，轮次重新计数），
+  再按 skill 的 `check → begin-round → …` 循环；报告：`report --output …` / `retrospective`。
+
 ## 常用命令
 
 - 引用程序集（首次/换版本）：`bash tools/fetch-refs.sh`（NuGet `Book.StS2.RefLib` → `.refs/sts2-refs/`，不入库）
@@ -60,4 +98,5 @@
 - M1：画布/节点/连线/状态标记/撤销重做/本局+全局持久化/i18n
 - v0.2.0：节点拖动跟手修复（全局鼠标坐标）、「连线」模式、贝塞尔分支 + 点阵网格 +
   圆角节点美化、右侧居中可拖动开关把手（位置持久化 `NotesGlobalData.ButtonX/Y`）
-- 待办：实机验收、卡面缩略图（atlas）、工坊发布物料、设置页（RitsuLib `[ModSettingsPage]`）
+- 待办：见上方「交接状态 → 未完成」清单（实机验收、卡面缩略图 atlas、设置页
+  RitsuLib `[ModSettingsPage]` 仍为长期方向）
