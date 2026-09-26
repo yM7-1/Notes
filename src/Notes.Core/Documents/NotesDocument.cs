@@ -46,18 +46,55 @@ public sealed class NotesDocument
         return board;
     }
 
-    public NotesBoard CreateBoard(string? name = null)
+    public NotesBoard CreateBoard(string? name = null, BoardKind kind = BoardKind.Free, int ordinal = 0)
     {
         var board = new NotesBoard
         {
             Id = IdFactory.NewBoardId(),
             Name = string.IsNullOrWhiteSpace(name) ? $"Board {Boards.Count + 1}" : name.Trim(),
+            Kind = kind,
+            Ordinal = ordinal,
             CreatedAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
         };
         Boards.Add(board);
         ActiveBoardId = board.Id;
         return board;
     }
+
+    /// <summary>All world-line boards of this document, ordered by their number.</summary>
+    public IEnumerable<NotesBoard> WorldLineBoards =>
+        Boards.Where(b => b.Kind == BoardKind.WorldLine).OrderBy(b => b.Ordinal);
+
+    /// <summary>The default "free overview" board (one per run document).</summary>
+    public NotesBoard EnsureOverviewBoard(string? name = null)
+    {
+        var existing = Boards.FirstOrDefault(b => b.Kind == BoardKind.Overview);
+        if (existing != null)
+        {
+            return existing;
+        }
+        return CreateBoard(name ?? "Overview", BoardKind.Overview);
+    }
+
+    public int NextWorldLineOrdinal()
+    {
+        var max = 0;
+        foreach (var board in WorldLineBoards)
+        {
+            max = Math.Max(max, board.Ordinal);
+        }
+        return max + 1;
+    }
+
+    /// <summary>Creates (and activates) the board that holds one world line.</summary>
+    public NotesBoard CreateWorldLineBoard(string name)
+    {
+        return CreateBoard(name, BoardKind.WorldLine, NextWorldLineOrdinal());
+    }
+
+    /// <summary>The board that holds the actual world line (lowest ordinal).</summary>
+    public NotesBoard? ActualWorldLineBoard =>
+        WorldLineBoards.FirstOrDefault();
 
     public bool RemoveBoard(string boardId)
     {
@@ -147,8 +184,9 @@ public sealed class NotesDocument
 
     // ---- structured mode (world lines / turn regions) ------------------------
 
-    /// <summary>First world line = the actual line; created on demand.</summary>
-    public NotesWorldLine EnsureActualWorldLine(string boardId)
+    /// <summary>First world line of a board (one line per board in run mode);
+    /// created on demand.</summary>
+    public NotesWorldLine EnsureActualWorldLine(string boardId, string? name = null)
     {
         var board = FindBoard(boardId) ?? throw new InvalidOperationException("board not found");
         var existing = board.WorldLines.FirstOrDefault();
@@ -159,7 +197,7 @@ public sealed class NotesDocument
         var line = new NotesWorldLine
         {
             Id = IdFactory.NewWorldLineId(),
-            Name = "Actual",
+            Name = string.IsNullOrWhiteSpace(name) ? "Actual" : name.Trim(),
             CreatedAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
         };
         board.WorldLines.Add(line);

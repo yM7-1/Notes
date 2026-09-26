@@ -144,16 +144,48 @@ public class StructuredModeTests
     }
 
     [Fact]
-    public void Importer_SkipsExhaustOps()
+    public void Importer_SkipsExhaustAndDiscardOps()
     {
         var (doc, board, line) = NewStructured();
         var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
         var ops = new List<NotesOpData>
         {
             new() { Id = "op1", Kind = NotesOpKind.Exhaust, Turn = 1, UnixMs = 1, Title = "消耗×2" },
+            new() { Id = "op2", Kind = NotesOpKind.Discard, Turn = 1, UnixMs = 2, Title = "弃牌×3" },
         };
 
         Assert.Empty(NotesImporter.Plan(board, region, ops).Nodes);
+    }
+
+    [Fact]
+    public void WorldLineBoards_AreNumberedAndOverviewComesFirst()
+    {
+        var document = new NotesDocument();
+        var overview = document.EnsureOverviewBoard("Overview");
+        Assert.Equal(BoardKind.Overview, overview.Kind);
+        Assert.Same(overview, document.EnsureOverviewBoard("Other"));
+
+        var first = document.CreateWorldLineBoard("World line 1");
+        var second = document.CreateWorldLineBoard("World line 2");
+        Assert.Equal(1, first.Ordinal);
+        Assert.Equal(2, second.Ordinal);
+        Assert.Same(first, document.ActualWorldLineBoard);
+
+        var cards = NotesLayout.OverviewCards(document);
+        Assert.Equal(2, cards.Count);
+        Assert.Equal(first.Id, cards[0].BoardId);
+        Assert.Equal(second.Id, cards[1].BoardId);
+        Assert.True(cards[1].X > cards[0].X);
+    }
+
+    [Fact]
+    public void EnsureActualWorldLine_UsesGivenName()
+    {
+        var document = new NotesDocument();
+        var board = document.CreateBoard("combat");
+        var line = document.EnsureActualWorldLine(board.Id, board.Name);
+        Assert.Equal("combat", line.Name);
+        Assert.Same(line, document.EnsureActualWorldLine(board.Id, "ignored"));
     }
 
     [Fact]

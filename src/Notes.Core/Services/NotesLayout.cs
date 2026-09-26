@@ -22,6 +22,11 @@ public static class NotesLayout
     public const float MinRegionWidth = 330f;
     public const float MinRegionHeight = 156f;
     public const int RootParallelSlots = 2;
+    public const float OverviewCardWidth = 340f;
+    public const float OverviewCardHeight = 132f;
+    public const float OverviewCardGapX = 24f;
+    public const float OverviewCardGapY = 18f;
+    public const int OverviewColumns = 3;
 
     public static void Apply(NotesBoard board)
     {
@@ -154,6 +159,26 @@ public static class NotesLayout
         return node.Y;
     }
 
+    /// <summary>Overview-board cards: one per world-line board, in a grid.</summary>
+    public static List<OverviewCard> OverviewCards(NotesDocument document)
+    {
+        var cards = new List<OverviewCard>();
+        var index = 0;
+        foreach (var board in document.WorldLineBoards)
+        {
+            var column = index % OverviewColumns;
+            var row = index / OverviewColumns;
+            cards.Add(new OverviewCard(
+                board.Id,
+                ColumnStartX + column * (OverviewCardWidth + OverviewCardGapX),
+                RowStartY + row * (OverviewCardHeight + OverviewCardGapY),
+                OverviewCardWidth,
+                OverviewCardHeight));
+            index++;
+        }
+        return cards;
+    }
+
     public static bool IsRoot(NotesBoard board, NotesNode node)
     {
         if (node.RegionId.Length == 0)
@@ -199,3 +224,6 @@ public static class NotesLayout
 }
 
 public readonly record struct NotesSlot(string ParentId, float X, float Y);
+
+/// <summary>Clickable world-line summary card on the overview board.</summary>
+public readonly record struct OverviewCard(string BoardId, float X, float Y, float Width, float Height);

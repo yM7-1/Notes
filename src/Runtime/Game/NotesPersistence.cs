@@ -30,6 +30,10 @@ internal static class NotesPersistence
     {
         public string Identity { get; set; } = "";
 
+        /// <summary>Identifies the combat the notes belong to; a different key
+        /// at combat start means the boards are reset (SL keeps the same key).</summary>
+        public string CombatKey { get; set; } = "";
+
         public NotesDocument Document { get; set; } = new();
 
         public List<NotesOpData> Ops { get; set; } = new();
@@ -117,9 +121,10 @@ internal static class NotesPersistence
         return "unknown";
     }
 
-    public static NotesDocument LoadRun(RunState state, out List<NotesOpData> ops)
+    public static NotesDocument LoadRun(RunState state, out List<NotesOpData> ops, out string combatKey)
     {
         ops = new List<NotesOpData>();
+        combatKey = "";
         try
         {
             var path = RunFilePath;
@@ -133,6 +138,7 @@ internal static class NotesPersistence
                 return new NotesDocument();
             }
             ops = payload.Ops ?? new List<NotesOpData>();
+            combatKey = payload.CombatKey ?? "";
             _lastWrittenJson = "";
             return NotesJson.Normalize(payload.Document);
         }
@@ -143,13 +149,18 @@ internal static class NotesPersistence
         return new NotesDocument();
     }
 
-    public static void SaveRun(RunState state, NotesDocument document, IReadOnlyList<NotesOpData> ops)
+    public static void SaveRun(
+        RunState state,
+        NotesDocument document,
+        IReadOnlyList<NotesOpData> ops,
+        string combatKey)
     {
         try
         {
             var payload = new RunFilePayload
             {
                 Identity = IdentityOf(state),
+                CombatKey = combatKey,
                 Document = document,
                 Ops = ops.ToList(),
             };

@@ -37,14 +37,13 @@ internal static class NotesOpLog
     private static string? _causeId;
     private static long _causeAtMs;
     private static NotesOpData? _drawBatch;
-    private static NotesOpData? _discardBatch;
     private static int _drawCount;
-    private static int _discardCount;
     private static int _turn;
     private static int _diagnostics;
     private static bool _initialized;
     private static CombatState? _combatState;
     private static Creature? _performingMonster;
+    private static List<string>? _endTurnHand;
 
     public static IReadOnlyList<NotesOpData> Entries
     {
@@ -79,6 +78,7 @@ internal static class NotesOpLog
         var manager = CombatManager.Instance;
         manager.TurnStarted += OnTurnStarted;
         manager.TurnEnded += OnTurnEnded;
+        manager.PlayerEndedTurn += OnPlayerEndedTurn;
         Log.Info("[Notes] op capture attached (CombatManager events + Harmony pile/card/potion hooks)");
     }
 
@@ -88,13 +88,12 @@ internal static class NotesOpLog
         {
             Ops.Clear();
             _drawBatch = null;
-            _discardBatch = null;
             _drawCount = 0;
-            _discardCount = 0;
             _causeId = null;
             EnemyNames.Clear();
             PendingGenerated.Clear();
             _performingMonster = null;
+            _endTurnHand = null;
         }
     }
 
@@ -108,7 +107,6 @@ internal static class NotesOpLog
                 Ops.Add(op.Clone());
             }
             _drawBatch = null;
-            _discardBatch = null;
             _causeId = null;
         }
     }
@@ -136,6 +134,7 @@ internal static class NotesOpLog
                 EnsureEnemyName(enemy);
             }
         }
+        NotesRuntime.OnCombatStarted(state);
         Log.Info("[Notes] new combat detected; op log reset");
     }
 
@@ -192,6 +191,7 @@ internal static class NotesOpLog
             }
             _turn = GameContext.Combat?.TurnNumber ?? state.RoundNumber;
             _causeId = null;
+            _endTurnHand = null;
             EndBatches();
             NotesRuntime.EnsureActualTurnRegion(_turn);
         }
@@ -215,13 +215,43 @@ internal static class NotesOpLog
                 _performingMonster = null;
             }
             EndBatches();
-            var op = AddOp(NotesOpKind.EndTurn, ModLocalization.T("op_end_turn", "结束回合"));
+            List<string>? hand;
+            lock (Gate)
+            {
+                hand = _endTurnHand;
+                _endTurnHand = null;
+            }
+            var op = AddOp(NotesOpKind.EndTurn, ModLocalization.T("op_end_turn", "结束回合"),
+                handOverride: hand);
             _causeId = null;
             NotesRuntime.UpdateActualRegionSnapshot(_turn, op.Snapshot, op.Hp, op.MaxHp);
         }
         catch (Exception ex)
         {
             Log.Error("[Notes] turn-end capture failed: " + ex);
+        }
+    }
+
+    /// <summary>CombatManager.PlayerEndedTurn (fires when the player requests the
+    /// end of turn, before the hand is discarded): cache the hand so the
+    /// end-turn step can show the hand it was played from.</summary>
+    private static void OnPlayerEndedTurn(Player player, bool canBackOut)
+    {
+        try
+        {
+            if (!ReferenceEquals(player, GameContext.LocalPlayer))
+            {
+                return;
+            }
+            var hand = GameContext.HandCards.Select(CardCatalog.TitleOf).ToList();
+            lock (Gate)
+            {
+                _endTurnHand = hand;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] end-turn hand capture failed: " + ex);
         }
     }
 
@@ -248,7 +278,8 @@ internal static class NotesOpLog
                 CardCatalog.Snapshot(card).Cost,
                 (int)card.Type,
                 (int)card.Rarity,
-                card.IsUpgraded);
+                card.IsUpgraded,
+                extraHandCard: CardCatalog.TitleOf(card));
             SetCause(op);
         }
         catch (Exception ex)
@@ -468,22 +499,19 @@ internal static class NotesOpLog
         {
             return; // the played card itself moving to the discard pile
         }
-        if (TryAnnotateCause(Format("annot_discard", "弃掉 {0}", name), "card:" + card.Id))
+        // Discards never become their own legend: they merge into the causing
+        // operation's explanation (like exhausts). Standalone discards (end of
+        // turn hand, enemy forced discards) land on the turn boundary.
+        if (TryMergeDiscardCause(name))
         {
             return;
         }
-        lock (Gate)
+        NotesRuntime.MergeTurnEvent(_turn, new NotesAnnotation
         {
-            if (_discardBatch == null)
-            {
-                _discardBatch = NewOp(NotesOpKind.Discard, ModLocalization.T("op_discard", "弃牌"));
-                Ops.Add(_discardBatch);
-            }
-            _discardCount++;
-            _discardBatch.Meta = string.IsNullOrEmpty(_discardBatch.Meta) ? name : _discardBatch.Meta + ", " + name;
-            _discardBatch.Title = ModLocalization.T("op_discard", "弃牌") + "×" + _discardCount;
-            NotesRuntime.OnOpsChanged();
-        }
+            RefId = "discard:",
+            Text = name,
+            Count = 1,
+        });
     }
 
     private static void HandleExhaust(CardModel card)
@@ -548,9 +576,7 @@ internal static class NotesOpLog
         lock (Gate)
         {
             _drawBatch = null;
-            _discardBatch = null;
             _drawCount = 0;
-            _discardCount = 0;
         }
     }
 
@@ -561,12 +587,14 @@ internal static class NotesOpLog
         int cost = -1,
         int cardType = -1,
         int rarity = -1,
-        bool upgraded = false)
+        bool upgraded = false,
+        string? extraHandCard = null,
+        IReadOnlyList<string>? handOverride = null)
     {
         NotesOpData op;
         lock (Gate)
         {
-            op = NewOp(kind, title);
+            op = NewOp(kind, title, extraHandCard, handOverride);
             op.RefId = refId;
             op.Cost = cost;
             op.CardType = cardType;
@@ -578,7 +606,11 @@ internal static class NotesOpLog
         return op;
     }
 
-    private static NotesOpData NewOp(NotesOpKind kind, string title)
+    private static NotesOpData NewOp(
+        NotesOpKind kind,
+        string title,
+        string? extraHandCard = null,
+        IReadOnlyList<string>? handOverride = null)
     {
         var op = new NotesOpData
         {
@@ -588,15 +620,19 @@ internal static class NotesOpLog
             UnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             Title = title,
         };
-        var snapshot = BuildSnapshot();
+        var snapshot = BuildSnapshot(extraHandCard, handOverride);
         op.Snapshot = snapshot.Text;
         op.Hp = snapshot.Hp;
         op.MaxHp = snapshot.MaxHp;
         return op;
     }
 
-    /// <summary>Player + enemy state right now, for the inspector panel.</summary>
-    private static (string Text, int Hp, int MaxHp) BuildSnapshot()
+    /// <summary>Player + enemy state right now, for the inspector panel. The hand
+    /// line shows the hand as it was when the operation started (the played card
+    /// is re-added; the end-turn step uses the pre-discard hand).</summary>
+    private static (string Text, int Hp, int MaxHp) BuildSnapshot(
+        string? extraHandCard = null,
+        IReadOnlyList<string>? handOverride = null)
     {
         try
         {
@@ -616,6 +652,15 @@ internal static class NotesOpLog
             {
                 parts.Add(ModLocalization.T("snap_energy", "Energy") + " " + combat.Energy + "/" + combat.MaxEnergy);
             }
+            var hand = handOverride != null
+                ? handOverride.ToList()
+                : GameContext.HandCards.Select(CardCatalog.TitleOf).ToList();
+            if (extraHandCard != null && !hand.Contains(extraHandCard, StringComparer.Ordinal))
+            {
+                hand.Insert(0, extraHandCard);
+            }
+            parts.Add(ModLocalization.T("snap_hand", "手牌") + ": "
+                + (hand.Count > 0 ? string.Join(", ", hand) : ModLocalization.T("snap_none", "none")));
             var buffs = creature.Powers
                 .Where(p => p.Amount != 0)
                 .Take(6)
@@ -698,6 +743,42 @@ internal static class NotesOpLog
             if (existing == null)
             {
                 cause.Annotations.Add(new NotesAnnotation { RefId = "exhaust:", Text = name, Meta = cause.Title });
+            }
+            else
+            {
+                if (existing.Meta.Length == 0)
+                {
+                    existing.Meta = cause.Title;
+                }
+                if (!existing.Text.Contains(name, StringComparison.Ordinal))
+                {
+                    existing.Text += "、" + name;
+                }
+            }
+        }
+        NotesRuntime.OnOpsChanged();
+        return true;
+    }
+
+    /// <summary>Merges discarded card names into one raw-name annotation
+    /// ("A、B"); the UI renders it as 「A」、「B」被弃置.</summary>
+    private static bool TryMergeDiscardCause(string name)
+    {
+        if (_causeId == null || Environment.TickCount64 - _causeAtMs > CauseWindowMs)
+        {
+            return false;
+        }
+        lock (Gate)
+        {
+            var cause = Ops.FirstOrDefault(o => o.Id == _causeId);
+            if (cause == null)
+            {
+                return false;
+            }
+            var existing = cause.Annotations.FirstOrDefault(a => a.RefId == "discard:");
+            if (existing == null)
+            {
+                cause.Annotations.Add(new NotesAnnotation { RefId = "discard:", Text = name, Meta = cause.Title });
             }
             else
             {

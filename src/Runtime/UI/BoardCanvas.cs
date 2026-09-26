@@ -282,6 +282,12 @@ public partial class BoardCanvas : Control
                     return;
                 }
                 var local = _surface.GetLocalMousePosition();
+                if (TryGetOverviewCardAt(local, out var overviewBoardId))
+                {
+                    NotesRuntime.SetActiveBoard(overviewBoardId);
+                    AcceptEvent();
+                    return;
+                }
                 if (_surface.TryGetEdgeNear(local, 10f, out var edgeId))
                 {
                     _menuEdgeId = edgeId;
@@ -452,6 +458,25 @@ public partial class BoardCanvas : Control
             if (header.HasPoint(surfacePosition))
             {
                 worldLineId = line.Id;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Overview board: hit-test the world-line summary cards.</summary>
+    private bool TryGetOverviewCardAt(Vector2 surfacePosition, out string boardId)
+    {
+        boardId = "";
+        if (_board == null || _board.Kind != BoardKind.Overview)
+        {
+            return false;
+        }
+        foreach (var card in NotesLayout.OverviewCards(NotesRuntime.ActiveDocument))
+        {
+            if (new Rect2(card.X, card.Y, card.Width, card.Height).HasPoint(surfacePosition))
+            {
+                boardId = card.BoardId;
                 return true;
             }
         }

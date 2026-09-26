@@ -5,9 +5,13 @@ using Notes.Game;
 
 namespace Notes.UI;
 
-/// <summary>The notes panel: header (library / board / actions) + canvas + card tray.</summary>
-public partial class NotesWindow : PanelContainer
+/// <summary>The notes panel: header (library / board / actions) + canvas + card tray.
+/// Freely resizable via the bottom-right grip; size is remembered.</summary>
+public partial class NotesWindow : Control
 {
+    private const float MinWindowWidth = 560f;
+    private const float MinWindowHeight = 380f;
+
     private OptionButton _boardPicker = null!;
     private Button _libraryButton = null!;
     private Button _linkButton = null!;
@@ -18,17 +22,54 @@ public partial class NotesWindow : PanelContainer
     private CardPalette _palette = null!;
     private InspectorPanel _inspector = null!;
     private ConfirmationDialog _deleteConfirm = null!;
+    private Panel _grip = null!;
     private bool _updating;
+    private bool _resizing;
+    private bool _sizeApplied;
+    private Vector2 _resizeStart;
+    private Vector2 _resizeOrigin;
+
+    public override void _Process(double delta)
+    {
+        if (!_sizeApplied && NotesRuntime.GlobalLoaded)
+        {
+            _sizeApplied = true;
+            if (NotesRuntime.TryGetWindowSize(out var savedW, out var savedH))
+            {
+                Size = new Vector2(
+                    Mathf.Max(savedW, MinWindowWidth),
+                    Mathf.Max(savedH, MinWindowHeight));
+            }
+            SetProcess(false);
+        }
+    }
 
     public override void _Ready()
     {
-        CustomMinimumSize = new Vector2(1000, 640);
+        CustomMinimumSize = new Vector2(MinWindowWidth, MinWindowHeight);
+        Size = NotesRuntime.TryGetWindowSize(out var savedW, out var savedH)
+            ? new Vector2(Mathf.Max(savedW, MinWindowWidth), Mathf.Max(savedH, MinWindowHeight))
+            : new Vector2(1000, 640);
+        _sizeApplied = NotesRuntime.GlobalLoaded;
         Position = new Vector2(48, 40);
-        AddThemeStyleboxOverride("panel", UiStyle.Box(UiStyle.WindowBg, UiStyle.PanelBorder, 10, 2));
+        ClipContents = true;
+
+        var background = new Panel { MouseFilter = MouseFilterEnum.Ignore };
+        background.SetAnchorsPreset(LayoutPreset.FullRect);
+        background.AddThemeStyleboxOverride("panel", UiStyle.Box(UiStyle.WindowBg, UiStyle.PanelBorder, 10, 2));
+        AddChild(background);
+
+        var margin = new MarginContainer();
+        margin.SetAnchorsPreset(LayoutPreset.FullRect);
+        foreach (var side in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
+        {
+            margin.AddThemeConstantOverride(side, 10);
+        }
+        AddChild(margin);
 
         var root = new VBoxContainer();
         root.AddThemeConstantOverride("separation", 8);
-        AddChild(root);
+        margin.AddChild(root);
 
         var header = new HBoxContainer();
         header.AddThemeConstantOverride("separation", 6);
@@ -94,7 +135,7 @@ public partial class NotesWindow : PanelContainer
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             SizeFlagsVertical = SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(640, 500),
+            CustomMinimumSize = new Vector2(320, 240),
         };
         _canvas.SetBackdrop(UiStyle.CanvasBg);
         body.AddChild(_canvas);
@@ -107,7 +148,7 @@ public partial class NotesWindow : PanelContainer
         var right = new VBoxContainer
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(292, 0),
+            CustomMinimumSize = new Vector2(240, 0),
         };
         right.AddThemeConstantOverride("separation", 6);
         right.AddChild(_palette);
@@ -119,6 +160,22 @@ public partial class NotesWindow : PanelContainer
         _status.AddThemeFontSizeOverride("font_size", 11);
         _status.AddThemeColorOverride("font_color", UiStyle.TextDim);
         root.AddChild(_status);
+
+        _grip = new Panel
+        {
+            MouseFilter = MouseFilterEnum.Stop,
+            MouseDefaultCursorShape = CursorShape.Fdiagsize,
+            TooltipText = ModLocalization.T("window_resize_tip", "Drag to resize"),
+        };
+        _grip.SetAnchorsPreset(LayoutPreset.BottomRight);
+        _grip.OffsetLeft = -20;
+        _grip.OffsetTop = -20;
+        _grip.OffsetRight = -3;
+        _grip.OffsetBottom = -3;
+        _grip.AddThemeStyleboxOverride("panel",
+            UiStyle.Box(Color.FromHtml("2a303b"), UiStyle.PanelBorder, 4, 1));
+        _grip.GuiInput += OnGripInput;
+        AddChild(_grip);
 
         _deleteConfirm = new ConfirmationDialog
         {
@@ -138,6 +195,39 @@ public partial class NotesWindow : PanelContainer
         NotesRuntime.SelectionChanged += RefreshInspector;
         RefreshHeader();
         RefreshInspector();
+    }
+
+    private void OnGripInput(InputEvent @event)
+    {
+        if (@event is InputEventMouseButton button && button.ButtonIndex == MouseButton.Left)
+        {
+            _resizing = button.Pressed;
+            if (button.Pressed)
+            {
+                _resizeStart = GetGlobalMousePosition();
+                _resizeOrigin = Size;
+            }
+            else
+            {
+                _sizeApplied = true;
+                SetProcess(false);
+                NotesRuntime.SaveWindowSize(Size.X, Size.Y);
+            }
+            AcceptEvent();
+            return;
+        }
+        if (@event is InputEventMouseMotion && _resizing)
+        {
+            var delta = GetGlobalMousePosition() - _resizeStart;
+            var viewport = GetViewportRect().Size;
+            var target = new Vector2(
+                Mathf.Clamp(_resizeOrigin.X + delta.X, MinWindowWidth,
+                    Mathf.Max(MinWindowWidth, viewport.X - Position.X - 8f)),
+                Mathf.Clamp(_resizeOrigin.Y + delta.Y, MinWindowHeight,
+                    Mathf.Max(MinWindowHeight, viewport.Y - Position.Y - 8f)));
+            Size = target;
+            AcceptEvent();
+        }
     }
 
     public override void _ExitTree()
@@ -362,6 +452,10 @@ public partial class NotesWindow : PanelContainer
         foreach (var annotation in node.Annotations)
         {
             lines.Add("▶ " + UiStyle.AnnotationText(annotation));
+        }
+        if (node.Meta.Length > 0 && node.Kind is NodeKind.Draw or NodeKind.Discard)
+        {
+            lines.Add("▶ " + ModLocalization.T("inspector_cards", "牌") + ": " + node.Meta);
         }
         if (node.Snapshot.Length > 0)
         {

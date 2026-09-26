@@ -1,3 +1,4 @@
+using MegaCrit.Sts2.Core.Combat;
 using Notes.Core.Documents;
 using Notes.Core.Services;
 
@@ -95,6 +96,7 @@ internal static class NotesRuntime
     private static bool _runDirty;
     private static bool _globalDirty;
     private static double _saveTimer;
+    private static string _combatKey = "";
 
     public static bool RunActive => GameContext.CurrentRun != null;
 
@@ -119,7 +121,8 @@ internal static class NotesRuntime
         var run = GameContext.CurrentRun;
         if (run != null)
         {
-            RunDocument = NotesPersistence.LoadRun(run, out var ops);
+            RunDocument = NotesPersistence.LoadRun(run, out var ops, out _combatKey);
+            RunDocument.EnsureOverviewBoard(OverviewBoardName());
             NotesOpLog.Load(ops);
             Library = NotesLibrary.Run;
         }
@@ -240,7 +243,7 @@ internal static class NotesRuntime
         {
             return;
         }
-        NotesPersistence.SaveRun(run, RunDocument, NotesOpLog.Entries);
+        NotesPersistence.SaveRun(run, RunDocument, NotesOpLog.Entries, _combatKey);
         _runDirty = false;
     }
 
@@ -269,6 +272,54 @@ internal static class NotesRuntime
         }
         x = 0f;
         y = 0f;
+        return false;
+    }
+
+    /// <summary>Remembers the notes window size.</summary>
+    public static void SaveWindowSize(float width, float height)
+    {
+        if (NotesPersistence.TryGetGlobalData(out var data))
+        {
+            data.WindowW = width;
+            data.WindowH = height;
+            NotesPersistence.SaveGlobalNow();
+        }
+    }
+
+    public static bool TryGetWindowSize(out float width, out float height)
+    {
+        if (NotesPersistence.TryGetGlobalData(out var data) && data.WindowW > 0f && data.WindowH > 0f)
+        {
+            width = data.WindowW;
+            height = data.WindowH;
+            return true;
+        }
+        width = 0f;
+        height = 0f;
+        return false;
+    }
+
+    /// <summary>Remembers the collapsed state / edge of the notes handle.</summary>
+    public static void SaveHandleState(bool collapsed, int side)
+    {
+        if (NotesPersistence.TryGetGlobalData(out var data))
+        {
+            data.HandleCollapsed = collapsed;
+            data.HandleSide = side;
+            NotesPersistence.SaveGlobalNow();
+        }
+    }
+
+    public static bool TryGetHandleState(out bool collapsed, out int side)
+    {
+        if (NotesPersistence.TryGetGlobalData(out var data))
+        {
+            collapsed = data.HandleCollapsed;
+            side = data.HandleSide;
+            return true;
+        }
+        collapsed = false;
+        side = 0;
         return false;
     }
 
@@ -304,7 +355,7 @@ internal static class NotesRuntime
             var run = GameContext.CurrentRun;
             if (run != null)
             {
-                NotesPersistence.SaveRun(run, RunDocument, NotesOpLog.Entries);
+                NotesPersistence.SaveRun(run, RunDocument, NotesOpLog.Entries, _combatKey);
             }
             _runDirty = false;
         }
@@ -340,13 +391,13 @@ internal static class NotesRuntime
 
     public static NotesTurnRegion? FindActualRegion(int turn)
     {
-        if (turn <= 0)
+        if (turn <= 0 || !RunActive)
         {
             return null;
         }
-        var board = ActiveBoard;
-        var line = board.WorldLines.FirstOrDefault();
-        return line == null
+        var board = ActualWorldLineBoard();
+        var line = board?.WorldLines.FirstOrDefault();
+        return line == null || board == null
             ? null
             : board.TurnRegions.FirstOrDefault(r => r.WorldLineId == line.Id && r.TurnNumber == turn);
     }
@@ -359,9 +410,9 @@ internal static class NotesRuntime
         {
             return;
         }
-        var document = ActiveDocument;
-        var board = ActiveBoard;
-        var line = document.EnsureActualWorldLine(board.Id);
+        var document = RunDocument;
+        var board = ActualWorldLineBoard()!;
+        var line = document.EnsureActualWorldLine(board.Id, board.Name);
         document.EnsureTurnRegion(board.Id, line.Id, turn);
         Raise();
     }
@@ -373,9 +424,9 @@ internal static class NotesRuntime
         {
             return;
         }
-        var document = ActiveDocument;
-        var board = ActiveBoard;
-        var line = document.EnsureActualWorldLine(board.Id);
+        var document = RunDocument;
+        var board = ActualWorldLineBoard()!;
+        var line = document.EnsureActualWorldLine(board.Id, board.Name);
         var region = document.EnsureTurnRegion(board.Id, line.Id, turn);
         region.Snapshot = snapshot;
         region.Hp = hp;
@@ -386,11 +437,12 @@ internal static class NotesRuntime
     public static bool HasRelicNode(int turn, string refId)
     {
         var region = FindActualRegion(turn);
-        if (region == null)
+        var board = ActualWorldLineBoard();
+        if (region == null || board == null)
         {
             return false;
         }
-        return ActiveBoard.NodesOfRegion(region.Id)
+        return board.NodesOfRegion(region.Id)
             .Any(n => n.Kind == NodeKind.Relic && n.RefId == refId);
     }
 
@@ -400,9 +452,9 @@ internal static class NotesRuntime
         {
             return;
         }
-        var document = ActiveDocument;
-        var board = ActiveBoard;
-        var line = document.EnsureActualWorldLine(board.Id);
+        var document = RunDocument;
+        var board = ActualWorldLineBoard()!;
+        var line = document.EnsureActualWorldLine(board.Id, board.Name);
         var region = document.EnsureTurnRegion(board.Id, line.Id, turn);
         if (!region.TurnEvents.Any(a => a.RefId == annotation.RefId && a.Text == annotation.Text))
         {
@@ -411,24 +463,25 @@ internal static class NotesRuntime
         Raise();
     }
 
-    /// <summary>Adds or merges an auto-captured turn event. Exhaust annotations
-    /// merge names into one chip; insertion annotations count copies.</summary>
+    /// <summary>Adds or merges an auto-captured turn event. Exhaust / discard
+    /// annotations merge names into one chip; insertion annotations count
+    /// copies.</summary>
     public static void MergeTurnEvent(int turn, NotesAnnotation annotation)
     {
         if (turn <= 0 || !RunActive)
         {
             return;
         }
-        var document = ActiveDocument;
-        var board = ActiveBoard;
-        var line = document.EnsureActualWorldLine(board.Id);
+        var document = RunDocument;
+        var board = ActualWorldLineBoard()!;
+        var line = document.EnsureActualWorldLine(board.Id, board.Name);
         var region = document.EnsureTurnRegion(board.Id, line.Id, turn);
         var existing = region.TurnEvents.FirstOrDefault(a => a.RefId == annotation.RefId);
         if (existing == null)
         {
             region.TurnEvents.Add(annotation.Clone());
         }
-        else if (annotation.RefId == "exhaust:")
+        else if (annotation.RefId is "exhaust:" or "discard:")
         {
             if (!existing.Text.Contains(annotation.Text, StringComparison.Ordinal))
             {
@@ -442,12 +495,69 @@ internal static class NotesRuntime
         Raise();
     }
 
+    // ---- boards / world lines ------------------------------------------------
+
+    public static string WorldLineBoardName(int ordinal) =>
+        ModLocalization.T("board_world_line", "世界线") + ordinal;
+
+    public static string OverviewBoardName() =>
+        ModLocalization.T("board_overview", "自由总览");
+
+    /// <summary>Board that owns the actual world line; created on demand.</summary>
+    public static NotesBoard? ActualWorldLineBoard()
+    {
+        if (!RunActive)
+        {
+            return null;
+        }
+        var document = RunDocument;
+        var board = document.ActualWorldLineBoard;
+        return board ?? document.CreateWorldLineBoard(WorldLineBoardName(document.NextWorldLineOrdinal()));
+    }
+
+    /// <summary>Called when a new combat shows up: boards reset to the default
+    /// overview board. The same combat (save-load / re-entry) keeps its notes.</summary>
+    public static void OnCombatStarted(CombatState state)
+    {
+        if (!RunActive)
+        {
+            return;
+        }
+        var key = CombatKeyOf(state);
+        if (key == _combatKey)
+        {
+            return;
+        }
+        _combatKey = key;
+        RunDocument = new NotesDocument();
+        RunDocument.EnsureOverviewBoard(OverviewBoardName());
+        Commands.Clear();
+        ClearSelection();
+        _runDirty = true;
+        FlushSave();
+        Raise();
+    }
+
+    private static string CombatKeyOf(CombatState state)
+    {
+        try
+        {
+            var run = GameContext.CurrentRun;
+            return (run?.CurrentActIndex ?? 0) + ":" + (run?.TotalFloor ?? 0)
+                + ":" + (state.Encounter?.Id.Entry ?? "");
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
     public static void NewWorldLine()
     {
         var document = ActiveDocument;
-        var board = ActiveBoard;
-        Commands.Execute(new AddWorldLineCommand(document, board.Id));
-        var line = board.WorldLines[^1];
+        var ordinal = document.NextWorldLineOrdinal();
+        var board = document.CreateWorldLineBoard(WorldLineBoardName(ordinal));
+        var line = document.EnsureActualWorldLine(board.Id, board.Name);
         // A brand-new line starts empty at turn 1; keep the current turn visible too.
         document.EnsureTurnRegion(board.Id, line.Id, 1);
         var turn = CurrentTurn;
@@ -458,18 +568,29 @@ internal static class NotesRuntime
         Raise();
     }
 
-    /// <summary>Builds note nodes from the captured operations (idempotent).</summary>
+    /// <summary>Builds note nodes from the captured operations. "Record turn"
+    /// overwrites the target world-line board's turn (manual nodes survive);
+    /// "record combat" creates a brand-new world-line board.</summary>
     public static void Import(bool currentTurnOnly)
     {
+        if (!RunActive)
+        {
+            LastImportMessage = ModLocalization.T("import_empty", "没有可录入的操作");
+            Raise();
+            return;
+        }
         var ops = CollectOps();
-        var document = ActiveDocument;
-        var board = ActiveBoard;
+        var document = RunDocument;
 
+        NotesBoard board;
         NotesWorldLine line;
         List<int> turns;
         if (currentTurnOnly)
         {
-            line = ResolveTargetWorldLine(document, board);
+            board = ActiveDocument == RunDocument && ActiveBoard.Kind == BoardKind.WorldLine
+                ? ActiveBoard
+                : ActualWorldLineBoard()!;
+            line = document.EnsureActualWorldLine(board.Id, board.Name);
             var turn = CurrentTurn > 0
                 ? CurrentTurn
                 : ops.Where(o => o.Turn > 0).Select(o => o.Turn).DefaultIfEmpty(0).Max();
@@ -477,17 +598,26 @@ internal static class NotesRuntime
         }
         else
         {
-            // Record the whole combat into a brand-new world line, and select it
-            // so follow-up "record turn" imports land on this line.
-            Commands.Execute(new AddWorldLineCommand(document, board.Id));
-            line = board.WorldLines[^1];
-            SelectWorldLine(line.Id);
+            // Record the whole combat into a brand-new world line (new board),
+            // and select it so follow-up "record turn" imports land on it.
+            var ordinal = document.NextWorldLineOrdinal();
+            board = document.CreateWorldLineBoard(WorldLineBoardName(ordinal));
+            line = document.EnsureActualWorldLine(board.Id, board.Name);
             turns = ops.Where(o => o.Turn > 0).Select(o => o.Turn).Distinct().OrderBy(t => t).ToList();
             if (turns.Count == 0)
             {
                 turns = new List<int> { Math.Max(1, CurrentTurn) };
             }
         }
+        if (Library != NotesLibrary.Run)
+        {
+            SetLibrary(NotesLibrary.Run);
+        }
+        if (ActiveBoard.Id != board.Id)
+        {
+            SetActiveBoard(board.Id);
+        }
+        SelectWorldLine(line.Id);
 
         var commands = new List<INotesCommand>();
         foreach (var turn in turns)
@@ -510,10 +640,10 @@ internal static class NotesRuntime
             Commands.Execute(new CompositeCommand(commands, "Import"));
         }
         LastImportMessage = commands.Count > 0
-            ? ModLocalization.T("import_done", "已录入") + " " + commands.Count + " → " + line.Name
+            ? ModLocalization.T("import_done", "已录入") + " " + commands.Count + " → " + board.Name
             : ModLocalization.T("import_empty", "没有可录入的操作");
         MegaCrit.Sts2.Core.Logging.Log.Info(
-            $"[Notes] import: line={line.Name} turns={string.Join(",", turns)} ops={ops.Count} commands={commands.Count}");
+            $"[Notes] import: board={board.Name} turns={string.Join(",", turns)} ops={ops.Count} commands={commands.Count}");
         Raise();
     }
 
@@ -535,23 +665,6 @@ internal static class NotesRuntime
             }
         }
         return ops;
-    }
-
-    /// <summary>Selected world line, or the line of the selected region, or the actual line.</summary>
-    private static NotesWorldLine ResolveTargetWorldLine(NotesDocument document, NotesBoard board)
-    {
-        if (SelectionKind == NotesSelectionKind.WorldLine
-            && board.FindWorldLine(SelectionId) is { } selected)
-        {
-            return selected;
-        }
-        if (SelectionKind == NotesSelectionKind.Region
-            && board.FindRegion(SelectionId) is { } region
-            && board.FindWorldLine(region.WorldLineId) is { } regionLine)
-        {
-            return regionLine;
-        }
-        return document.EnsureActualWorldLine(board.Id);
     }
 
     public static void ClearOps()

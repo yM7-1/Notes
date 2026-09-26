@@ -186,6 +186,23 @@ internal static class UiStyle
                 : string.Join(", ", names);
             return ModLocalization.T("annot_exhaust_fmt", "「{0}」被消耗").Replace("{0}", joined);
         }
+        if (refId.StartsWith("discard:", StringComparison.Ordinal))
+        {
+            var names = annotation.Text.Split('、', StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (annotation.Meta.Length > 0)
+            {
+                var index = names.IndexOf(annotation.Meta);
+                if (index > 0)
+                {
+                    names.RemoveAt(index);
+                    names.Insert(0, annotation.Meta);
+                }
+            }
+            var joined = ModLocalization.IsChinese
+                ? string.Join("」、「", names)
+                : string.Join(", ", names);
+            return ModLocalization.T("annot_discard_fmt", "「{0}」被弃置").Replace("{0}", joined);
+        }
         if (refId.StartsWith("damage:", StringComparison.Ordinal))
         {
             var parts = annotation.Meta.Split('\u001f');
@@ -209,9 +226,10 @@ internal static class UiStyle
     }
 
     /// <summary>Annotations that belong on the boundary between two turn
-    /// regions (enemy insertions, unattributed exhausts).</summary>
+    /// regions (enemy insertions, unattributed exhausts / discards).</summary>
     public static bool IsBoundaryAnnotation(string refId) =>
         refId.StartsWith("exhaust:", StringComparison.Ordinal)
+        || refId.StartsWith("discard:", StringComparison.Ordinal)
         || refId.StartsWith("insert:", StringComparison.Ordinal);
 
     /// <summary>Accent color for an annotation chip / badge.</summary>
@@ -224,6 +242,10 @@ internal static class UiStyle
         if (refId.StartsWith("exhaust:", StringComparison.Ordinal))
         {
             return KindColor(NodeKind.Exhaust, -1);
+        }
+        if (refId.StartsWith("discard:", StringComparison.Ordinal))
+        {
+            return KindColor(NodeKind.Discard, -1);
         }
         if (refId.StartsWith("insert:", StringComparison.Ordinal))
         {

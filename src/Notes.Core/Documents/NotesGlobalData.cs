@@ -9,4 +9,15 @@ public sealed class NotesGlobalData
     public float ButtonX { get; set; } = -1f;
 
     public float ButtonY { get; set; } = -1f;
+
+    /// <summary>Notes window size; -1 = default.</summary>
+    public float WindowW { get; set; } = -1f;
+
+    public float WindowH { get; set; } = -1f;
+
+    /// <summary>Handle collapsed into a small edge arrow.</summary>
+    public bool HandleCollapsed { get; set; }
+
+    /// <summary>0 = right edge, 1 = left edge (used while collapsed).</summary>
+    public int HandleSide { get; set; }
 }

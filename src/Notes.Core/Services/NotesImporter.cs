@@ -33,7 +33,8 @@ public static class NotesImporter
         var turnOps = ops
             .Where(o => o.Turn == region.TurnNumber
                 && o.Kind != NotesOpKind.TurnEvent
-                && o.Kind != NotesOpKind.Exhaust) // exhausts live in op annotations / turn events
+                && o.Kind != NotesOpKind.Exhaust // exhausts live in op annotations / turn events
+                && o.Kind != NotesOpKind.Discard) // discards live in op annotations / turn events
             .OrderBy(o => o.UnixMs)
             .ToList();
 

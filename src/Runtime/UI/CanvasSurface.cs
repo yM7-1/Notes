@@ -166,7 +166,14 @@ public partial class CanvasSurface : Control
             return;
         }
 
-        DrawWorldLinesAndRegions();
+        if (_board.Kind == BoardKind.Overview)
+        {
+            DrawOverview();
+        }
+        else
+        {
+            DrawWorldLinesAndRegions();
+        }
 
         foreach (var edge in _board.Edges)
         {
@@ -215,6 +222,72 @@ public partial class CanvasSurface : Control
             {
                 DrawCircle(new Vector2(startX + i * GridSpacing, startY + j * GridSpacing), 1.2f, UiStyle.GridDot);
             }
+        }
+    }
+
+    /// <summary>Overview board: one clickable summary card per world-line board.</summary>
+    private void DrawOverview()
+    {
+        var document = NotesRuntime.ActiveDocument;
+        var font = ThemeDB.FallbackFont;
+        var mouse = GetLocalMousePosition();
+        var actualBoardId = document.ActualWorldLineBoard?.Id ?? "";
+
+        DrawString(font, new Vector2(NotesLayout.ColumnStartX, NotesLayout.RowStartY - 26),
+            ModLocalization.T("overview_title", "世界线总览"), HorizontalAlignment.Left, -1, 16, UiStyle.Accent);
+        DrawString(font, new Vector2(NotesLayout.ColumnStartX, NotesLayout.RowStartY - 8),
+            ModLocalization.T("overview_hint", "点击卡片跳转到对应世界线画板"), HorizontalAlignment.Left, -1, 11,
+            UiStyle.TextDim);
+
+        foreach (var card in NotesLayout.OverviewCards(document))
+        {
+            var board = document.FindBoard(card.BoardId);
+            if (board == null)
+            {
+                continue;
+            }
+            var rect = new Rect2(card.X, card.Y, card.Width, card.Height);
+            var hovered = rect.HasPoint(mouse);
+            var isActual = board.Id == actualBoardId;
+            var border = hovered
+                ? UiStyle.Accent
+                : isActual
+                    ? UiStyle.Accent.Lerp(UiStyle.PanelBorder, 0.35f)
+                    : UiStyle.PanelBorder;
+            DrawRect(rect, Color.FromHtml("1e222bd9"), true);
+            DrawRect(rect, border, false, hovered ? 2.5f : 1.5f);
+
+            var title = board.Name + (isActual ? "  ·  " + ModLocalization.T("overview_actual", "实际") : "");
+            DrawString(font, rect.Position + new Vector2(14, 28), title, HorizontalAlignment.Left, -1, 15,
+                hovered ? UiStyle.Accent : UiStyle.TextMain);
+
+            var line = board.WorldLines.FirstOrDefault();
+            var lines = new List<string>();
+            if (line != null)
+            {
+                var stats = NotesStats.Compute(board, line.Id);
+                lines.Add(ModLocalization.T("overview_turns", "回合") + " " + stats.TurnCount
+                    + "   " + ModLocalization.T("overview_nodes", "节点") + " " + stats.NodeCount
+                    + "   " + ModLocalization.T("inspector_branches", "分支") + " " + stats.BranchCount);
+                lines.Add(ModLocalization.T("overview_marks", "标记") + " ✔" + stats.TriedCount
+                    + " ?" + stats.SpeculatedCount + " ★" + stats.ConfirmedCount
+                    + "   " + ModLocalization.T("inspector_damage", "累计战损") + " " + stats.DamageTaken);
+            }
+            else
+            {
+                lines.Add(ModLocalization.T("overview_empty", "（尚未录入）"));
+            }
+            var y = rect.Position.Y + 52f;
+            foreach (var text in lines)
+            {
+                DrawString(font, new Vector2(rect.Position.X + 14, y), text, HorizontalAlignment.Left, -1, 11,
+                    UiStyle.TextDim);
+                y += 17f;
+            }
+            var jump = ModLocalization.T("overview_jump", "点击跳转 →");
+            var jumpSize = font.GetStringSize(jump, HorizontalAlignment.Left, -1, 10);
+            DrawString(font, new Vector2(rect.End.X - jumpSize.X - 12, rect.End.Y - 10), jump,
+                HorizontalAlignment.Left, -1, 10, hovered ? UiStyle.Accent : UiStyle.TextDim);
         }
     }
 

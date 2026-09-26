@@ -7,6 +7,13 @@ public sealed class NotesBoard
 
     public string Name { get; set; } = "";
 
+    /// <summary>Free canvas vs. run overview vs. one world line.</summary>
+    public BoardKind Kind { get; set; }
+
+    /// <summary>1-based world-line number for <see cref="BoardKind.WorldLine"/>
+    /// boards (the board is named "世界线N" / "World line N").</summary>
+    public int Ordinal { get; set; }
+
     public List<NotesNode> Nodes { get; set; } = new();
 
     public List<NotesEdge> Edges { get; set; } = new();
