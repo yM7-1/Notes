@@ -48,6 +48,8 @@ internal static class NotesPersistence
         RitsuLibFramework.SubscribeLifecycle<RunStartedEvent>(e => OnRunStarted(e.RunState));
         RitsuLibFramework.SubscribeLifecycle<RunLoadedEvent>(e => OnRunStarted(e.RunState));
         RitsuLibFramework.SubscribeLifecycle<RunEndedEvent>(_ => OnRunEnded());
+        // Flush our in-memory notes into the run data before the game snapshots it.
+        RitsuLibFramework.SubscribeLifecycle<RunSavingEvent>(_ => NotesRuntime.FlushSave());
     }
 
     private static void OnRunStarted(RunState state)

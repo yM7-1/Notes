@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.2 — 2026-09-26
+
+- 修复：SL（退出主菜单再继续）后笔记丢失
+  - 运行数据（笔记+流水）现在**每次改动即时写入** run 数据袋（内存写入，零成本），
+    并订阅 RitsuLib `RunSavingEvent`（游戏保存前 Prefix）再兜底 flush；
+    关闭笔记窗口也会 flush
+- 修复：录入功能无效（根因：RitsuLib 战斗事件在本环境未送达）
+  - 捕获改为直连游戏钩子：`CombatManager.TurnStarted/TurnEnded`（游戏事件）、
+    `CombatHistory.CardPlayStarted`、`CardPile.AddInternal`（抽/弃）、
+    `PotionModel.EnqueueManualUse`、`RelicModel.Flash`（均为同步钩子）
+  - 新增捕获诊断日志（前 5 条 `[Notes] capture:`）与录入反馈（状态栏显示「已录入 N」/
+    「没有可录入的操作」）
+- 修复：拖出后未入槽的图例再次拖动时不显示下一步槽位
+  - 统一所有节点拖动：拖动任意节点（自由/结构化）都会显示可放槽位；
+    拖到槽位可吸附入链，拖到空白脱离；自由节点也可直接拖入槽位
+
 ## v0.3.1 — 2026-09-26
 
 - 修复（本轮验收）：

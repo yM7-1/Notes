@@ -75,6 +75,10 @@ public partial class NotesLayer : CanvasLayer
         {
             _window.OnShown();
         }
+        else
+        {
+            NotesRuntime.FlushSave();
+        }
         UpdateHandleStyle();
     }
 

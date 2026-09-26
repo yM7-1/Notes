@@ -237,8 +237,10 @@ public partial class NotesWindow : PanelContainer
             {
                 hint = ModLocalization.T("status_hint", "");
             }
+            var import = NotesRuntime.LastImportMessage;
             _status.Text = combat
                 + "  ·  " + ModLocalization.T("status_ops", "Ops") + " " + NotesRuntime.OpsCount
+                + (import.Length > 0 ? "  ·  " + import : "")
                 + "  ·  " + hint;
         }
         finally

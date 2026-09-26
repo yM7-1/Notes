@@ -106,5 +106,7 @@
   "snap_energy": "Energy",
   "snap_potions": "Potions",
   "snap_none": "none",
-  "snap_enemies": "Enemies"
+  "snap_enemies": "Enemies",
+  "import_done": "Imported",
+  "import_empty": "Nothing to import (play cards / use potions first)"
 }

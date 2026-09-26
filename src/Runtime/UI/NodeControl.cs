@@ -228,10 +228,7 @@ public partial class NodeControl : Control
                 _moved = false;
                 _grabOffset = GetGlobalMousePosition() - GlobalPosition;
                 _startNodePosition = new Vector2(_node.X, _node.Y);
-                if (_node.RegionId.Length > 0)
-                {
-                    _canvas.BeginStructuredDrag(_node.Id);
-                }
+                _canvas.BeginNodeDrag(_node.Id);
                 MoveToFront();
                 QueueRedraw();
                 AcceptEvent();
@@ -248,18 +245,7 @@ public partial class NodeControl : Control
                 {
                     _dragging = false;
                     QueueRedraw();
-                    if (_node.RegionId.Length > 0)
-                    {
-                        _canvas.EndStructuredDrag(_node.Id, Position);
-                    }
-                    else if (_moved)
-                    {
-                        _canvas.CommitNodeMove(_node.Id, _startNodePosition, Position);
-                    }
-                    else
-                    {
-                        NotesRuntime.SelectNode(_node.Id);
-                    }
+                    _canvas.EndNodeDrag(_node.Id, _startNodePosition, Position, _moved);
                     AcceptEvent();
                 }
             }

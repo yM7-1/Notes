@@ -44,6 +44,9 @@ internal static class NotesRuntime
 
     public static string SelectionId { get; private set; } = "";
 
+    /// <summary>Short feedback for the last import action (shown in the status bar).</summary>
+    public static string LastImportMessage { get; private set; } = "";
+
     public static void SelectNode(string nodeId) => SetSelection(NotesSelectionKind.Node, nodeId);
 
     public static void SelectRegion(string regionId) => SetSelection(NotesSelectionKind.Region, regionId);
@@ -185,6 +188,7 @@ internal static class NotesRuntime
             // layout is best-effort; never block the UI
         }
         MarkDirty();
+        FlushRunIfPossible();
         Changed?.Invoke();
     }
 
@@ -192,7 +196,25 @@ internal static class NotesRuntime
     public static void OnOpsChanged()
     {
         MarkDirty();
+        FlushRunIfPossible();
         OpsChanged?.Invoke();
+    }
+
+    /// <summary>Run-scoped data is cheap to write (in-memory bag), so flush it
+    /// immediately: a later save/quit-to-menu then always contains our notes.</summary>
+    private static void FlushRunIfPossible()
+    {
+        if (!_runDirty)
+        {
+            return;
+        }
+        var run = GameContext.CurrentRun;
+        if (run == null)
+        {
+            return;
+        }
+        NotesPersistence.SaveRun(run, RunDocument, NotesOpLog.Entries);
+        _runDirty = false;
     }
 
     /// <summary>Marks the active library dirty without rebuilding the UI
@@ -422,6 +444,9 @@ internal static class NotesRuntime
         {
             Commands.Execute(new CompositeCommand(commands, "Import"));
         }
+        LastImportMessage = commands.Count > 0
+            ? ModLocalization.T("import_done", "已录入") + " " + commands.Count
+            : ModLocalization.T("import_empty", "没有可录入的操作");
         MegaCrit.Sts2.Core.Logging.Log.Info(
             $"[Notes] import: turns={string.Join(",", turns)} ops={ops.Count} commands={commands.Count}");
         Raise();

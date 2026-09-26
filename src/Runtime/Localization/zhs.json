@@ -106,5 +106,7 @@
   "snap_energy": "能量",
   "snap_potions": "药水",
   "snap_none": "无",
-  "snap_enemies": "敌方"
+  "snap_enemies": "敌方",
+  "import_done": "已录入",
+  "import_empty": "没有可录入的操作（先在战斗中出牌/用药）"
 }

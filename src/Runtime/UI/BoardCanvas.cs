@@ -41,7 +41,7 @@ public partial class BoardCanvas : Control
     private NoteEditDialog _editor = null!;
     private NotesBoard? _board;
     private string? _linkFrom;
-    private string? _structuredDragNode;
+    private string? _dragNode;
     private string _menuNodeId = "";
     private string _menuEdgeId = "";
     private string _menuRegionId = "";
@@ -58,7 +58,7 @@ public partial class BoardCanvas : Control
 
     public string? ActiveLinkSource => _linkFrom;
 
-    public bool SlotHint => _dragActive || _structuredDragNode != null;
+    public bool SlotHint => _dragActive || _dragNode != null;
 
     public void SetBackdrop(Color color)
     {
@@ -155,9 +155,9 @@ public partial class BoardCanvas : Control
         {
             _linkFrom = null;
         }
-        if (_structuredDragNode != null && _board?.FindNode(_structuredDragNode) == null)
+        if (_dragNode != null && _board?.FindNode(_dragNode) == null)
         {
-            _structuredDragNode = null;
+            _dragNode = null;
         }
         _surface.SetBoard(_board);
         ApplyView();
@@ -503,41 +503,49 @@ public partial class BoardCanvas : Control
         return false;
     }
 
-    // ---- structured drag ------------------------------------------------------
+    // ---- node drag (free move / slot placement / re-slot / detach) ------------
 
     public void OnNodeMoved() => _surface.QueueRedraw();
 
-    public void BeginStructuredDrag(string nodeId)
+    /// <summary>Any node drag shows the free slot markers.</summary>
+    public void BeginNodeDrag(string nodeId)
     {
-        _structuredDragNode = nodeId;
+        _dragNode = nodeId;
         _surface.QueueRedraw();
     }
 
-    public void EndStructuredDrag(string nodeId, Vector2 localPosition)
+    public void EndNodeDrag(string nodeId, Vector2 startPosition, Vector2 currentPosition, bool moved)
     {
-        _structuredDragNode = null;
+        _dragNode = null;
         _surface.QueueRedraw();
         if (_board == null)
         {
             return;
         }
-        var document = NotesRuntime.ActiveDocument;
-        var commands = new List<INotesCommand>();
-        var incoming = _board.Edges.FirstOrDefault(e => e.To == nodeId);
-        if (incoming != null)
-        {
-            commands.Add(new RemoveEdgeCommand(document, _board.Id, incoming.Id));
-        }
-
-        var hit = FindSlot(_surface.GetLocalMousePosition(), nodeId);
         var node = _board.FindNode(nodeId);
         if (node == null)
         {
             return;
         }
+        var structured = node.RegionId.Length > 0;
+        if (!moved)
+        {
+            NotesRuntime.SelectNode(nodeId);
+            return;
+        }
+
+        var document = NotesRuntime.ActiveDocument;
+        var commands = new List<INotesCommand>();
+        var incoming = _board.Edges.FirstOrDefault(e => e.To == nodeId);
+        var hit = FindSlot(_surface.GetLocalMousePosition(), nodeId);
+
         if (hit is { } target)
         {
             var (region, slot) = target;
+            if (incoming != null)
+            {
+                commands.Add(new RemoveEdgeCommand(document, _board.Id, incoming.Id));
+            }
             if (node.RegionId != region.Id)
             {
                 var before = node.Clone();
@@ -555,18 +563,30 @@ public partial class BoardCanvas : Control
                 }));
             }
         }
-        else
+        else if (structured)
         {
-            // Dropped on empty canvas: detach from the chain, keep as free node.
+            // Dropped on empty canvas: detach from the chain, keep as free node
+            // at the position where it was dropped.
+            if (incoming != null)
+            {
+                commands.Add(new RemoveEdgeCommand(document, _board.Id, incoming.Id));
+            }
             var before = node.Clone();
             var after = node.Clone();
             after.RegionId = "";
+            after.X = currentPosition.X;
+            after.Y = currentPosition.Y;
             commands.Add(new UpdateNodeCommand(document, _board.Id, nodeId, before, after));
+        }
+        else
+        {
+            NotesRuntime.Commands.PushApplied(new MoveNodeCommand(
+                document, _board.Id, nodeId, startPosition.X, startPosition.Y, currentPosition.X, currentPosition.Y));
         }
 
         if (commands.Count > 0)
         {
-            NotesRuntime.Commands.Execute(new CompositeCommand(commands, "MoveBranch"));
+            NotesRuntime.Commands.Execute(new CompositeCommand(commands, "MoveNode"));
         }
         NotesRuntime.Raise();
     }

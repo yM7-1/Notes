@@ -1,23 +1,29 @@
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using Notes.Core.Documents;
 using Notes.Core.Services;
-using STS2RitsuLib;
 
 namespace Notes.Game;
 
 /// <summary>
-/// Captures the local player's combat operations (card plays, potions, draws,
-/// discards, end turn) plus relic triggers (via the RelicModel.Flash patch).
-/// Runs for the current combat only; the buffer is persisted with the run save.
-/// Attribution rule: an event within a short window after an operation becomes
-/// that operation's annotation; otherwise it becomes a standalone op / turn event.
+/// Captures the local player's combat operations.
+/// Hook sources (all synchronous / game-provided, independent of RitsuLib
+/// lifecycle patches which did not deliver combat events in testing):
+/// - CombatManager.CombatBegan / TurnStarted / TurnEnded (game events)
+/// - CombatHistory.CardPlayStarted (Harmony)
+/// - CardPile.AddInternal for hand/discard piles (Harmony)
+/// - PotionModel.EnqueueManualUse (Harmony)
+/// - RelicModel.Flash (Harmony)
+/// Relic triggers and effect draws/discards within a short window after an
+/// operation become that operation's annotation; standalone runs become ops.
 /// </summary>
 internal static class NotesOpLog
 {
     private const long CauseWindowMs = 450;
+    private const int DiagnosticEventLimit = 5;
 
     private static readonly List<NotesOpData> Ops = new();
     private static readonly object Gate = new();
@@ -28,7 +34,9 @@ internal static class NotesOpLog
     private static int _drawCount;
     private static int _discardCount;
     private static int _turn;
+    private static int _diagnostics;
     private static bool _initialized;
+    private static CombatState? _combatState;
 
     public static IReadOnlyList<NotesOpData> Entries
     {
@@ -59,13 +67,11 @@ internal static class NotesOpLog
             return;
         }
         _initialized = true;
-        RitsuLibFramework.SubscribeLifecycle<CombatStartingEvent>(_ => OnCombatStarting());
-        RitsuLibFramework.SubscribeLifecycle<PlayerTurnStartedEvent>(OnPlayerTurnStarted);
-        RitsuLibFramework.SubscribeLifecycle<CardPlayedEvent>(OnCardPlayed);
-        RitsuLibFramework.SubscribeLifecycle<PotionUsedEvent>(OnPotionUsed);
-        RitsuLibFramework.SubscribeLifecycle<CardDrawnEvent>(OnCardDrawn);
-        RitsuLibFramework.SubscribeLifecycle<CardDiscardedEvent>(OnCardDiscarded);
-        RitsuLibFramework.SubscribeLifecycle<SideTurnEndedEvent>(OnSideTurnEnded);
+
+        var manager = CombatManager.Instance;
+        manager.TurnStarted += OnTurnStarted;
+        manager.TurnEnded += OnTurnEnded;
+        Log.Info("[Notes] op capture attached (CombatManager events + Harmony pile/card/potion hooks)");
     }
 
     public static void Clear()
@@ -96,31 +102,33 @@ internal static class NotesOpLog
         }
     }
 
-    // ---- event handlers -------------------------------------------------------
+    // ---- game event handlers --------------------------------------------------
 
-    private static void OnCombatStarting()
+    /// <summary>Resets the log when a new combat state shows up (CombatBegan does
+    /// not exist on older game APIs, so detect it from the turn events).</summary>
+    private static void EnsureCombat(CombatState state)
     {
-        try
+        if (ReferenceEquals(_combatState, state))
         {
-            Clear();
-            _turn = 0;
-            NotesRuntime.OnOpsChanged();
+            return;
         }
-        catch (Exception ex)
-        {
-            Log.Error("[Notes] combat-start capture failed: " + ex);
-        }
+        _combatState = state;
+        Clear();
+        _turn = 0;
+        _diagnostics = 0;
+        Log.Info("[Notes] new combat detected; op log reset");
     }
 
-    private static void OnPlayerTurnStarted(PlayerTurnStartedEvent e)
+    private static void OnTurnStarted(CombatState state)
     {
         try
         {
-            if (!ReferenceEquals(e.Player, GameContext.LocalPlayer))
+            EnsureCombat(state);
+            if (state.CurrentSide != CombatSide.Player)
             {
                 return;
             }
-            _turn = e.Player.PlayerCombatState?.TurnNumber ?? _turn + 1;
+            _turn = GameContext.Combat?.TurnNumber ?? state.RoundNumber;
             _causeId = null;
             EndBatches();
             NotesRuntime.EnsureActualTurnRegion(_turn);
@@ -131,18 +139,42 @@ internal static class NotesOpLog
         }
     }
 
-    private static void OnCardPlayed(CardPlayedEvent e)
+    private static void OnTurnEnded(CombatState state)
     {
         try
         {
-            var play = e.CardPlay;
-            // CardPlay.Player only exists on newer APIs; CardModel.Owner works on all.
-            if (!ReferenceEquals(play.Card.Owner, GameContext.LocalPlayer))
+            EnsureCombat(state);
+            if (state.CurrentSide != CombatSide.Player)
             {
                 return;
             }
             EndBatches();
+            var op = AddOp(NotesOpKind.EndTurn, ModLocalization.T("op_end_turn", "结束回合"));
+            _causeId = null;
+            NotesRuntime.UpdateActualRegionSnapshot(_turn, op.Snapshot, op.Hp, op.MaxHp);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] turn-end capture failed: " + ex);
+        }
+    }
+
+    /// <summary>CardPlayStarted hook (per repetition; repeated plays counted once).</summary>
+    public static void OnCardPlayed(CardPlay play)
+    {
+        try
+        {
+            if (play.PlayCount > 1 && play.PlayIndex > 0)
+            {
+                return;
+            }
             var card = play.Card;
+            if (!ReferenceEquals(card.Owner, GameContext.LocalPlayer))
+            {
+                return;
+            }
+            LogDiagnostic($"card play '{CardCatalog.TitleOf(card)}' owner-match=true");
+            EndBatches();
             var op = AddOp(
                 NotesOpKind.Card,
                 CardCatalog.TitleOf(card),
@@ -159,96 +191,47 @@ internal static class NotesOpLog
         }
     }
 
-    private static void OnPotionUsed(PotionUsedEvent e)
+    /// <summary>CardPile.AddInternal hook: hand = draw, discard = discard.</summary>
+    public static void OnCardAdded(PileType pileType, CardModel card)
     {
         try
         {
-            if (!ReferenceEquals(e.Potion.Owner, GameContext.LocalPlayer))
+            if (card == null || !ReferenceEquals(card.Owner, GameContext.LocalPlayer))
             {
                 return;
             }
+            if (pileType == PileType.Hand)
+            {
+                HandleDraw(card);
+            }
+            else if (pileType == PileType.Discard)
+            {
+                HandleDiscard(card);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Notes] pile capture failed: " + ex);
+        }
+    }
+
+    /// <summary>PotionModel.EnqueueManualUse hook.</summary>
+    public static void OnPotionQueued(PotionModel potion)
+    {
+        try
+        {
+            if (!ReferenceEquals(potion.Owner, GameContext.LocalPlayer))
+            {
+                return;
+            }
+            LogDiagnostic($"potion '{PotionTitle(potion)}' owner-match=true");
             EndBatches();
-            var op = AddOp(NotesOpKind.Potion, PotionTitle(e.Potion), e.Potion.Id.ToString());
+            var op = AddOp(NotesOpKind.Potion, PotionTitle(potion), potion.Id.ToString());
             SetCause(op);
         }
         catch (Exception ex)
         {
             Log.Error("[Notes] potion capture failed: " + ex);
-        }
-    }
-
-    private static void OnCardDrawn(CardDrawnEvent e)
-    {
-        try
-        {
-            if (!ReferenceEquals(e.Card.Owner, GameContext.LocalPlayer))
-            {
-                return;
-            }
-            var name = CardCatalog.TitleOf(e.Card);
-            if (TryAnnotateCause(Format("annot_draw_to", "抽到 {0}", name), "card:" + e.Card.Id))
-            {
-                return;
-            }
-            lock (Gate)
-            {
-                _drawBatch ??= NewOp(NotesOpKind.Draw, ModLocalization.T("op_draw", "抽牌"));
-                _drawCount++;
-                _drawBatch.Meta = string.IsNullOrEmpty(_drawBatch.Meta) ? name : _drawBatch.Meta + ", " + name;
-                _drawBatch.Title = ModLocalization.T("op_draw", "抽牌") + "×" + _drawCount;
-                NotesRuntime.OnOpsChanged();
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error("[Notes] draw capture failed: " + ex);
-        }
-    }
-
-    private static void OnCardDiscarded(CardDiscardedEvent e)
-    {
-        try
-        {
-            if (!ReferenceEquals(e.Card.Owner, GameContext.LocalPlayer))
-            {
-                return;
-            }
-            var name = CardCatalog.TitleOf(e.Card);
-            if (TryAnnotateCause(Format("annot_discard", "弃掉 {0}", name), "card:" + e.Card.Id))
-            {
-                return;
-            }
-            lock (Gate)
-            {
-                _discardBatch ??= NewOp(NotesOpKind.Discard, ModLocalization.T("op_discard", "弃牌"));
-                _discardCount++;
-                _discardBatch.Meta = string.IsNullOrEmpty(_discardBatch.Meta) ? name : _discardBatch.Meta + ", " + name;
-                _discardBatch.Title = ModLocalization.T("op_discard", "弃牌") + "×" + _discardCount;
-                NotesRuntime.OnOpsChanged();
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error("[Notes] discard capture failed: " + ex);
-        }
-    }
-
-    private static void OnSideTurnEnded(SideTurnEndedEvent e)
-    {
-        try
-        {
-            if (e.Side != CombatSide.Player)
-            {
-                return;
-            }
-            EndBatches();
-            var op = AddOp(NotesOpKind.EndTurn, ModLocalization.T("op_end_turn", "结束回合"));
-            _causeId = null;
-            NotesRuntime.UpdateActualRegionSnapshot(_turn, op.Snapshot, op.Hp, op.MaxHp);
-        }
-        catch (Exception ex)
-        {
-            Log.Error("[Notes] turn-end capture failed: " + ex);
         }
     }
 
@@ -280,7 +263,41 @@ internal static class NotesOpLog
         }
     }
 
-    // ---- helpers --------------------------------------------------------------
+    // ---- shared handling ------------------------------------------------------
+
+    private static void HandleDraw(CardModel card)
+    {
+        var name = CardCatalog.TitleOf(card);
+        if (TryAnnotateCause(Format("annot_draw_to", "抽到 {0}", name), "card:" + card.Id))
+        {
+            return;
+        }
+        lock (Gate)
+        {
+            _drawBatch ??= NewOp(NotesOpKind.Draw, ModLocalization.T("op_draw", "抽牌"));
+            _drawCount++;
+            _drawBatch.Meta = string.IsNullOrEmpty(_drawBatch.Meta) ? name : _drawBatch.Meta + ", " + name;
+            _drawBatch.Title = ModLocalization.T("op_draw", "抽牌") + "×" + _drawCount;
+            NotesRuntime.OnOpsChanged();
+        }
+    }
+
+    private static void HandleDiscard(CardModel card)
+    {
+        var name = CardCatalog.TitleOf(card);
+        if (TryAnnotateCause(Format("annot_discard", "弃掉 {0}", name), "card:" + card.Id))
+        {
+            return;
+        }
+        lock (Gate)
+        {
+            _discardBatch ??= NewOp(NotesOpKind.Discard, ModLocalization.T("op_discard", "弃牌"));
+            _discardCount++;
+            _discardBatch.Meta = string.IsNullOrEmpty(_discardBatch.Meta) ? name : _discardBatch.Meta + ", " + name;
+            _discardBatch.Title = ModLocalization.T("op_discard", "弃牌") + "×" + _discardCount;
+            NotesRuntime.OnOpsChanged();
+        }
+    }
 
     private static void EndBatches()
     {
@@ -367,7 +384,8 @@ internal static class NotesOpLog
             parts.Add(ModLocalization.T("snap_potions", "Potions") + ": "
                 + (potions.Count > 0 ? string.Join(", ", potions) : ModLocalization.T("snap_none", "none")));
             var enemies = new List<string>();
-            foreach (var enemy in creature.CombatState?.Enemies ?? (IReadOnlyList<MegaCrit.Sts2.Core.Entities.Creatures.Creature>)Array.Empty<MegaCrit.Sts2.Core.Entities.Creatures.Creature>())
+            foreach (var enemy in creature.CombatState?.Enemies
+                ?? (IReadOnlyList<MegaCrit.Sts2.Core.Entities.Creatures.Creature>)Array.Empty<MegaCrit.Sts2.Core.Entities.Creatures.Creature>())
             {
                 if (enemy.IsAlive)
                 {
@@ -384,23 +402,6 @@ internal static class NotesOpLog
         {
             return ("", -1, -1);
         }
-    }
-
-    private static string PowerName(PowerModel power)
-    {
-        try
-        {
-            var title = power.Title.GetFormattedText();
-            if (!string.IsNullOrWhiteSpace(title))
-            {
-                return title;
-            }
-        }
-        catch
-        {
-            // fall back to entry id
-        }
-        return power.Id.Entry ?? "";
     }
 
     private static void SetCause(NotesOpData op)
@@ -430,6 +431,16 @@ internal static class NotesOpLog
         }
         NotesRuntime.OnOpsChanged();
         return true;
+    }
+
+    private static void LogDiagnostic(string message)
+    {
+        if (_diagnostics >= DiagnosticEventLimit)
+        {
+            return;
+        }
+        _diagnostics++;
+        Log.Info("[Notes] capture: " + message);
     }
 
     private static string RelicTitle(RelicModel relic)
@@ -464,6 +475,23 @@ internal static class NotesOpLog
             // fall back to entry id
         }
         return potion.Id.Entry ?? "";
+    }
+
+    private static string PowerName(PowerModel power)
+    {
+        try
+        {
+            var title = power.Title.GetFormattedText();
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                return title;
+            }
+        }
+        catch
+        {
+            // fall back to entry id
+        }
+        return power.Id.Entry ?? "";
     }
 
     private static string Format(string key, string fallback, string value) =>
