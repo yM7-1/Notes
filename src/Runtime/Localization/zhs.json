@@ -63,6 +63,7 @@
   "annot_draw_to": "抽到 {0}",
   "annot_discard": "弃掉 {0}",
   "annot_exhaust": "消耗 {0}",
+  "annot_exhaust_fmt": "「{0}」被消耗",
   "annot_relic_trigger": "「{0}」触发",
   "node_toggle_upgrade": "切换升级 +",
   "node_add_slot": "＋并行槽位",

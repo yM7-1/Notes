@@ -18,7 +18,6 @@ public partial class NodeControl : Control
     private StyleBoxFlat _box = null!;
     private StyleBoxFlat _bar = null!;
     private StyleBoxFlat _badge = null!;
-    private StyleBoxFlat _chip = null!;
     private bool _hover;
     private bool _hoverPort;
     private bool _dragging;
@@ -46,19 +45,18 @@ public partial class NodeControl : Control
         _badge = new StyleBoxFlat();
         _badge.SetCornerRadiusAll(5);
         _badge.SetBorderWidthAll(1);
-        _chip = new StyleBoxFlat();
-        _chip.SetCornerRadiusAll(4);
-        _chip.SetBorderWidthAll(1);
 
         MouseEntered += () =>
         {
             _hover = true;
+            NotesRuntime.SetHoverNode(_node.Id);
             QueueRedraw();
         };
         MouseExited += () =>
         {
             _hover = false;
             _hoverPort = false;
+            NotesRuntime.ClearHoverNode(_node.Id);
             QueueRedraw();
         };
 
@@ -82,7 +80,7 @@ public partial class NodeControl : Control
         }
         if (_node.Annotations.Count > 0)
         {
-            text += "\n" + string.Join("\n", _node.Annotations.Select(a => "• " + a.Text));
+            text += "\n" + string.Join("\n", _node.Annotations.Select(a => "• " + UiStyle.AnnotationText(a)));
         }
         if (!string.IsNullOrWhiteSpace(_node.Note))
         {
@@ -197,20 +195,17 @@ public partial class NodeControl : Control
                 stateGlyph, HorizontalAlignment.Left, -1, 11, stateColor);
         }
 
-        // Auto-captured annotations as chips under the node.
-        var chipY = Size.Y + 4f;
-        foreach (var annotation in _node.Annotations.Take(3))
+        // Annotation count badge (details are shown in the inspector on hover).
+        if (_node.Annotations.Count > 0)
         {
-            var text = UiStyle.Ellipsize(annotation.Text, font, 10, 176f);
-            var textSize = font.GetStringSize(text, HorizontalAlignment.Left, -1, 10);
-            var chip = new Rect2(6, chipY, textSize.X + 12, 16);
-            var accent = AnnotationColor(annotation.RefId);
-            _chip.BgColor = UiStyle.BadgeBg;
-            _chip.BorderColor = accent;
-            DrawStyleBox(_chip, chip);
-            DrawString(font, chip.Position + new Vector2(6, 12), text,
+            var badgeCenter = new Vector2(Size.X - 12, Size.Y - 12);
+            var accent = AnnotationColor(_node.Annotations[0].RefId);
+            DrawCircle(badgeCenter, 9f, UiStyle.BadgeBg);
+            DrawCircle(badgeCenter, 9f, accent, false, 1.5f);
+            var count = _node.Annotations.Count.ToString();
+            var countSize = font.GetStringSize(count, HorizontalAlignment.Left, -1, 10);
+            DrawString(font, badgeCenter + new Vector2(-countSize.X / 2f, countSize.Y / 2f - 2f), count,
                 HorizontalAlignment.Left, -1, 10, accent);
-            chipY += 18f;
         }
 
         DrawCircle(PortOffset, _hoverPort ? 8f : 6f, UiStyle.BadgeBg);

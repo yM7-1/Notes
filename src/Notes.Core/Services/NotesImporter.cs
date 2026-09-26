@@ -19,20 +19,25 @@ public static class NotesImporter
     public static NotesImportPlan Plan(
         NotesBoard board,
         NotesTurnRegion region,
-        IReadOnlyList<NotesOpData> ops)
+        IReadOnlyList<NotesOpData> ops,
+        bool replaceImported = false)
     {
         var plan = new NotesImportPlan();
-        var existingOpIds = board.NodesOfRegion(region.Id)
-            .Select(n => n.SourceOpId)
-            .Where(id => id.Length > 0)
-            .ToHashSet(StringComparer.Ordinal);
+        var existingOpIds = replaceImported
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : board.NodesOfRegion(region.Id)
+                .Select(n => n.SourceOpId)
+                .Where(id => id.Length > 0)
+                .ToHashSet(StringComparer.Ordinal);
 
         var turnOps = ops
             .Where(o => o.Turn == region.TurnNumber && o.Kind != NotesOpKind.TurnEvent)
             .OrderBy(o => o.UnixMs)
             .ToList();
 
-        var tail = FindTailId(board, region, turnOps, existingOpIds);
+        var tail = replaceImported
+            ? FindManualTailId(board, region)
+            : FindTailId(board, region, turnOps, existingOpIds);
         foreach (var op in turnOps)
         {
             if (existingOpIds.Contains(op.Id))
@@ -73,6 +78,25 @@ public static class NotesImporter
         }
 
         return plan;
+    }
+
+    /// <summary>Tail among manually placed nodes only (used when imported nodes
+    /// are about to be replaced).</summary>
+    private static string? FindManualTailId(NotesBoard board, NotesTurnRegion region)
+    {
+        var manual = board.NodesOfRegion(region.Id)
+            .Where(n => n.SourceOpId.Length == 0)
+            .ToList();
+        if (manual.Count == 0)
+        {
+            return null;
+        }
+        var manualIds = manual.Select(n => n.Id).ToHashSet(StringComparer.Ordinal);
+        var hasChild = board.EdgesOfRegion(region.Id)
+            .Where(e => manualIds.Contains(e.From) && manualIds.Contains(e.To))
+            .Select(e => e.From)
+            .ToHashSet(StringComparer.Ordinal);
+        return manual.FirstOrDefault(n => !hasChild.Contains(n.Id))?.Id;
     }
 
     private static string? FindTailId(

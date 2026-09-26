@@ -116,6 +116,34 @@ public class StructuredModeTests
     }
 
     [Fact]
+    public void Importer_ReplaceImported_RebuildsTheTurn()
+    {
+        var (doc, board, line) = NewStructured();
+        var region = doc.EnsureTurnRegion(board.Id, line.Id, 1);
+        var ops = new List<NotesOpData>
+        {
+            new() { Id = "op1", Kind = NotesOpKind.Card, Turn = 1, UnixMs = 1, Title = "Strike" },
+            new() { Id = "op2", Kind = NotesOpKind.Exhaust, Turn = 1, UnixMs = 2, Title = "消耗" },
+        };
+        var first = NotesImporter.Plan(board, region, ops);
+        foreach (var node in first.Nodes)
+        {
+            doc.AddNode(board.Id, node);
+        }
+        foreach (var edge in first.Edges)
+        {
+            doc.AddEdge(board.Id, edge);
+        }
+
+        // Plain re-import is idempotent...
+        Assert.Empty(NotesImporter.Plan(board, region, ops).Nodes);
+        // ...but a replace import rebuilds the turn.
+        var replace = NotesImporter.Plan(board, region, ops, replaceImported: true);
+        Assert.Equal(2, replace.Nodes.Count);
+        Assert.Single(replace.Edges);
+    }
+
+    [Fact]
     public void Importer_MapsExhaustOpsToExhaustNodes()
     {
         Assert.Equal(NodeKind.Exhaust, NotesImporter.MapKind(NotesOpKind.Exhaust));

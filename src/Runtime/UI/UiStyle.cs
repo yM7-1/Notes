@@ -1,5 +1,6 @@
 using Godot;
 using Notes.Core.Documents;
+using Notes.Game;
 
 namespace Notes.UI;
 
@@ -159,5 +160,20 @@ internal static class UiStyle
             }
         }
         return ellipsis;
+    }
+
+    /// <summary>Human-readable annotation text. Exhaust annotations store raw
+    /// names ("A、B") and render as 「A」、「B」被消耗.</summary>
+    public static string AnnotationText(NotesAnnotation annotation)
+    {
+        if (annotation.RefId.StartsWith("exhaust:", StringComparison.Ordinal))
+        {
+            var names = annotation.Text.Split('、', StringSplitOptions.RemoveEmptyEntries);
+            var joined = ModLocalization.IsChinese
+                ? string.Join("」、「", names)
+                : string.Join(", ", names);
+            return ModLocalization.T("annot_exhaust_fmt", "「{0}」被消耗").Replace("{0}", joined);
+        }
+        return annotation.Text;
     }
 }

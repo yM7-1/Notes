@@ -258,45 +258,20 @@ public partial class NotesWindow : PanelContainer
         try
         {
             var board = NotesRuntime.ActiveBoard;
+            if (NotesRuntime.HoverNodeId.Length > 0 && board.FindNode(NotesRuntime.HoverNodeId) is { } hoverNode)
+            {
+                ShowNodeDetail(hoverNode);
+                return;
+            }
             switch (NotesRuntime.SelectionKind)
             {
                 case NotesSelectionKind.Node:
-                {
-                    var node = board.FindNode(NotesRuntime.SelectionId);
-                    if (node == null)
+                    if (board.FindNode(NotesRuntime.SelectionId) is { } node)
                     {
-                        _inspector.Show(ModLocalization.T("inspector_title", "Detail"),
-                            ModLocalization.T("inspector_none", "Select a step, turn region or world line"));
-                        return;
+                        ShowNodeDetail(node);
                     }
-                    var lines = new List<string>
-                    {
-                        KindLabel(node.Kind) + " · " + node.Title + (node.Upgraded ? "+" : "")
-                            + "   " + StateLabel(node.State),
-                    };
-                    if (node.Kind == NodeKind.Card && node.Cost >= 0)
-                    {
-                        lines.Add(ModLocalization.T("inspector_cost", "Cost") + ": " + node.Cost);
-                    }
-                    if (node.Annotations.Count > 0)
-                    {
-                        lines.Add(ModLocalization.T("inspector_annotations", "Annotations") + ":");
-                        lines.AddRange(node.Annotations.Select(a => "• " + a.Text));
-                    }
-                    if (node.Snapshot.Length > 0)
-                    {
-                        lines.Add("");
-                        lines.Add(ModLocalization.T("inspector_state", "State at this step") + ":");
-                        lines.Add(node.Snapshot);
-                    }
-                    if (!string.IsNullOrWhiteSpace(node.Note))
-                    {
-                        lines.Add("");
-                        lines.Add(node.Note);
-                    }
-                    _inspector.Show(ModLocalization.T("inspector_node", "Step detail"), string.Join("\n", lines));
                     break;
-                }
+
                 case NotesSelectionKind.Region:
                 {
                     var region = board.FindRegion(NotesRuntime.SelectionId);
@@ -314,7 +289,7 @@ public partial class NotesWindow : PanelContainer
                     if (region.TurnEvents.Count > 0)
                     {
                         lines.Add(ModLocalization.T("inspector_turn_events", "Turn events") + ":");
-                        lines.AddRange(region.TurnEvents.Select(e => "• " + e.Text));
+                        lines.AddRange(region.TurnEvents.Select(e => "• " + UiStyle.AnnotationText(e)));
                     }
                     lines.Add("");
                     lines.Add(ModLocalization.T("inspector_state_end", "State at end of turn") + ":");
@@ -324,6 +299,7 @@ public partial class NotesWindow : PanelContainer
                     _inspector.Show(ModLocalization.T("inspector_region", "Turn region"), string.Join("\n", lines));
                     break;
                 }
+
                 case NotesSelectionKind.WorldLine:
                 {
                     var line = board.FindWorldLine(NotesRuntime.SelectionId);
@@ -357,6 +333,7 @@ public partial class NotesWindow : PanelContainer
                     _inspector.Show(ModLocalization.T("inspector_world_line", "World line overview"), string.Join("\n", lines));
                     break;
                 }
+
                 default:
                     _inspector.Show(ModLocalization.T("inspector_title", "Detail"),
                         ModLocalization.T("inspector_none", "Select a step, turn region or world line"));
@@ -367,6 +344,37 @@ public partial class NotesWindow : PanelContainer
         {
             // inspector is informational only
         }
+    }
+
+    /// <summary>Step detail: annotations first (e.g. 「A」、「B」被消耗), then the
+    /// captured state snapshot and the user note.</summary>
+    private void ShowNodeDetail(NotesNode node)
+    {
+        var lines = new List<string>
+        {
+            KindLabel(node.Kind) + " · " + node.Title + (node.Upgraded ? "+" : "")
+                + (node.State != NodeState.None ? "   " + StateLabel(node.State) : ""),
+        };
+        if (node.Kind == NodeKind.Card && node.Cost >= 0)
+        {
+            lines.Add(ModLocalization.T("inspector_cost", "Cost") + ": " + node.Cost);
+        }
+        foreach (var annotation in node.Annotations)
+        {
+            lines.Add("▶ " + UiStyle.AnnotationText(annotation));
+        }
+        if (node.Snapshot.Length > 0)
+        {
+            lines.Add("");
+            lines.Add(ModLocalization.T("inspector_state", "State at this step") + ":");
+            lines.Add(node.Snapshot);
+        }
+        if (!string.IsNullOrWhiteSpace(node.Note))
+        {
+            lines.Add("");
+            lines.Add(node.Note);
+        }
+        _inspector.Show(ModLocalization.T("inspector_node", "Step detail"), string.Join("\n", lines));
     }
 
     private static string KindLabel(NodeKind kind) => kind switch

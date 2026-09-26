@@ -44,6 +44,30 @@ internal static class NotesRuntime
 
     public static string SelectionId { get; private set; } = "";
 
+    /// <summary>Node under the mouse; the inspector previews it without changing
+    /// the selection.</summary>
+    public static string HoverNodeId { get; private set; } = "";
+
+    public static void SetHoverNode(string nodeId)
+    {
+        if (HoverNodeId == nodeId)
+        {
+            return;
+        }
+        HoverNodeId = nodeId;
+        SelectionChanged?.Invoke();
+    }
+
+    public static void ClearHoverNode(string nodeId)
+    {
+        if (HoverNodeId != nodeId)
+        {
+            return;
+        }
+        HoverNodeId = "";
+        SelectionChanged?.Invoke();
+    }
+
     /// <summary>Short feedback for the last import action (shown in the status bar).</summary>
     public static string LastImportMessage { get; private set; } = "";
 
@@ -90,6 +114,7 @@ internal static class NotesRuntime
     public static void OnRunContextChanged()
     {
         FlushSave();
+        HoverNodeId = "";
 
         var run = GameContext.CurrentRun;
         if (run != null)
@@ -120,6 +145,7 @@ internal static class NotesRuntime
         {
             return;
         }
+        HoverNodeId = "";
         Commands.Clear();
         Library = library;
         Raise();
@@ -127,6 +153,7 @@ internal static class NotesRuntime
 
     public static void SetActiveBoard(string boardId)
     {
+        HoverNodeId = "";
         ActiveDocument.ActiveBoardId = boardId;
         Raise();
     }
@@ -435,7 +462,15 @@ internal static class NotesRuntime
         foreach (var turn in turns)
         {
             var region = document.EnsureTurnRegion(board.Id, line.Id, turn);
-            var plan = NotesImporter.Plan(board, region, ops);
+            var plan = NotesImporter.Plan(board, region, ops, replaceImported: currentTurnOnly);
+            if (currentTurnOnly)
+            {
+                // Overwrite: drop nodes previously imported into this turn region;
+                // manually placed nodes are kept.
+                commands.AddRange(board.NodesOfRegion(region.Id)
+                    .Where(n => n.SourceOpId.Length > 0)
+                    .Select(n => (INotesCommand)new RemoveNodeCommand(document, board.Id, n.Id)));
+            }
             commands.AddRange(plan.Nodes.Select(node => (INotesCommand)new AddNodeCommand(document, board.Id, node)));
             commands.AddRange(plan.Edges.Select(edge => (INotesCommand)new AddEdgeCommand(document, board.Id, edge)));
             var last = ops

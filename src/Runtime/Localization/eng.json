@@ -63,6 +63,7 @@
   "annot_draw_to": "Drew {0}",
   "annot_discard": "Discarded {0}",
   "annot_exhaust": "Exhausted {0}",
+  "annot_exhaust_fmt": "Exhausted: {0}",
   "annot_relic_trigger": "\"{0}\" triggered",
   "node_toggle_upgrade": "Toggle upgraded +",
   "node_add_slot": "Add parallel slot",

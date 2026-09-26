@@ -327,7 +327,7 @@ internal static class NotesOpLog
             return; // the played card itself exhausting after play
         }
         // Exhaust effects often hit several cards: merge them into one annotation.
-        if (TryMergeCauseAnnotation("exhaust:", name, "annot_exhaust", "消耗 {0}"))
+        if (TryMergeExhaustCause(name))
         {
             return;
         }
@@ -482,8 +482,9 @@ internal static class NotesOpLog
         return true;
     }
 
-    /// <summary>Merges e.g. "exhaust: A" and "exhaust: B" into one "消耗 A、B" chip.</summary>
-    private static bool TryMergeCauseAnnotation(string refId, string name, string labelKey, string fallback)
+    /// <summary>Merges exhausted card names into one raw-name annotation
+    /// ("A、B"); the UI renders it as 「A」、「B」被消耗.</summary>
+    private static bool TryMergeExhaustCause(string name)
     {
         if (_causeId == null || Environment.TickCount64 - _causeAtMs > CauseWindowMs)
         {
@@ -496,14 +497,10 @@ internal static class NotesOpLog
             {
                 return false;
             }
-            var existing = cause.Annotations.FirstOrDefault(a => a.RefId == refId);
+            var existing = cause.Annotations.FirstOrDefault(a => a.RefId == "exhaust:");
             if (existing == null)
             {
-                cause.Annotations.Add(new NotesAnnotation
-                {
-                    RefId = refId,
-                    Text = Format(labelKey, fallback, name),
-                });
+                cause.Annotations.Add(new NotesAnnotation { RefId = "exhaust:", Text = name });
             }
             else if (!existing.Text.Contains(name, StringComparison.Ordinal))
             {
