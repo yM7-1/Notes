@@ -18,7 +18,7 @@ public partial class NotesWindow
             ModLocalization.T("export_free", "自由节点"),
             ModLocalization.T("export_note", "备注"));
         var markdown = NotesExport.ToMarkdown(board, labels);
-        var dir = ProjectSettings.GlobalizePath("user://notes-export");
+        var dir = ExportDirectory();
         try
         {
             DirAccess.MakeDirRecursiveAbsolute(dir);
@@ -39,6 +39,17 @@ public partial class NotesWindow
             NotesRuntime.SetImportMessage(ModLocalization.T("export_failed", "导出失败（见游戏日志）"));
         }
         NotesRuntime.Raise();
+    }
+
+    private static string ExportDirectory() =>
+        ProjectSettings.GlobalizePath("user://notes-export");
+
+    /// <summary>Opens the export folder in the system file manager.</summary>
+    public void OpenExportDirectory()
+    {
+        var dir = ExportDirectory();
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        OS.ShellOpen(dir);
     }
 
     /// <summary>Best-effort screenshot: crop the viewport texture to the canvas

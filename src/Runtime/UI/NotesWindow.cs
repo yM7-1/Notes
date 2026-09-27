@@ -416,6 +416,13 @@ public partial class NotesWindow : Control
             return;
         }
         var ctrl = key.CtrlPressed || key.MetaPressed;
+        if (!ctrl && !key.AltPressed
+            && key.Keycode is Key.Bracketleft or Key.Bracketright)
+        {
+            CycleBoard(key.Keycode == Key.Bracketright ? 1 : -1);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (ctrl && key.Keycode == Key.F)
         {
             OpenSearch();
@@ -453,6 +460,23 @@ public partial class NotesWindow : Control
         {
             GetViewport().SetInputAsHandled();
         }
+    }
+
+    /// <summary>Steps through the boards of the active library ([ and ]).</summary>
+    private void CycleBoard(int direction)
+    {
+        var document = NotesRuntime.ActiveDocument;
+        if (document.Boards.Count < 2)
+        {
+            return;
+        }
+        var index = document.Boards.FindIndex(b => b.Id == document.ActiveBoardId);
+        if (index < 0)
+        {
+            index = 0;
+        }
+        index = (index + direction + document.Boards.Count) % document.Boards.Count;
+        NotesRuntime.SetActiveBoard(document.Boards[index].Id);
     }
 
     /// <summary>1/2/3 mark the selected node(s), 0 clears the mark, Delete removes

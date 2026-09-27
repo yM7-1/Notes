@@ -61,7 +61,7 @@
   "save": "保存",
   "cancel": "取消",
   "delete_board_text": "删除当前画板？此操作可用撤销恢复。",
-  "status_hint": "拖动图例移动 · 圆点或「连线」建分支 · 右键菜单 · 滚轮缩放",
+  "status_hint": "F8 收起 · [ ] 翻板 · Ctrl+Z 撤销 · Ctrl+F 搜索 · 1/2/3 标记",
   "status_combat": "战斗中",
   "status_no_combat": "非战斗",
   "link_mode": "连线",
@@ -161,7 +161,7 @@
   "empty_current_title": "本回合暂无记录",
   "empty_current_hint": "战斗中的操作会自动记录在这里",
   "empty_board_title": "空画板",
-  "empty_board_hint": "从右侧拖入卡牌，或点「记本回合」录入本回合",
+  "empty_board_hint": "点击卡牌即放置（Alt+点击=推测），或从右侧拖入；Ctrl+点击/框选可多选",
   "palette_upgrade_tip": "右键切换升级 +",
   "load_corrupt": "笔记存档损坏，已备份并新建：{0}",
   "load_newer": "笔记存档来自更新版本，已备份并新建：{0}",
@@ -228,5 +228,8 @@
   "quick_actions_title": "悬浮球快捷动作",
   "quick_act_record": "记本回合",
   "quick_act_copy": "复制→新线",
-  "quick_act_settings": "打开设置"
+  "quick_act_settings": "打开设置",
+  "compare_turns": "回合数",
+  "settings_export_dir": "导出目录（Markdown + PNG）",
+  "settings_open_export": "打开目录"
 }

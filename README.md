@@ -30,8 +30,9 @@
 
 ```bash
 bash tools/fetch-refs.sh                 # 拉 0.107.1 / 0.111.0 参考程序集（.refs，不入库）
-bash tools/check.sh                      # 实机版本 + 最低版本 双构建 + 单元测试
-bash tools/check.sh                      # 全绿后交付
+bash tools/check.sh                      # 双构建 + Core 单测 + 版本号/工坊 changenote/i18n 键一致性
+python3 tools/check_i18n.py              # 仅校验 zhs/en 键集合一致（check.sh 亦会执行）
+dotnet test tests/Notes.Tests/Notes.Tests.csproj -c Release   # 只跑单测
 
 # 本地部署到游戏（WSL）
 dotnet build Notes.csproj -c Release -p:CopyModOnBuild=true -p:SteamRoot=/mnt/d/Steam \

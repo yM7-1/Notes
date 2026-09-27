@@ -107,6 +107,21 @@ public partial class NotesWindow
         _settingsQuickCopy = MakeQuickCheck(panel, "quick_act_copy", "复制→新线", 2);
         _settingsQuickSettings = MakeQuickCheck(panel, "quick_act_settings", "打开设置", 4);
 
+        var exportRow = new HBoxContainer();
+        exportRow.AddThemeConstantOverride("separation", 8);
+        var exportLabel = new Label
+        {
+            Text = ModLocalization.T("settings_export_dir", "导出目录（Markdown + PNG）"),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        exportLabel.AddThemeFontSizeOverride("font_size", 11);
+        exportRow.AddChild(exportLabel);
+        var exportButton = new Button { Text = ModLocalization.T("settings_open_export", "打开目录") };
+        UiStyle.StyleButton(exportButton, fontSize: 11);
+        exportButton.Pressed += OpenExportDirectory;
+        exportRow.AddChild(exportButton);
+        panel.AddChild(exportRow);
+
         var close = new Button { Text = ModLocalization.T("close", "Close") };
         UiStyle.StyleButton(close);
         close.Pressed += () => _settingsPopup.Hide();

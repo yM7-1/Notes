@@ -25,6 +25,11 @@ public class NotesExportTests
             State = NodeState.Tried,
             RegionId = "r",
             Note = "first try",
+            Annotations =
+            {
+                new NotesAnnotation { RefId = "damage:", Text = "Torch", Count = 6 },
+                new NotesAnnotation { RefId = "exhaust:", Text = "Defend", Count = 1 },
+            },
         });
         board.Nodes.Add(new NotesNode { Id = "n2", Kind = NodeKind.Text, Title = "Idea" });
 
@@ -34,6 +39,8 @@ public class NotesExportTests
         Assert.Contains("## Actual", markdown);
         Assert.Contains("### Turn 2 · HP 58", markdown);
         Assert.Contains("- [x] Strike (1)", markdown);
+        Assert.Contains("  - Torch ×6", markdown);
+        Assert.Contains("  - Defend\n", markdown);
         Assert.Contains("  > Note: first try", markdown);
         Assert.Contains("## Free nodes", markdown);
         Assert.Contains("- Idea", markdown);

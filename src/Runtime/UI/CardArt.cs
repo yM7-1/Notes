@@ -7,6 +7,8 @@ namespace Notes.UI;
 /// portrait atlas is best-effort: any failure falls back to the plain badge.</summary>
 internal static class CardArt
 {
+    private const int CacheLimit = 512;
+
     private static readonly Dictionary<string, CardModel?> Models = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, Texture2D?> Portraits = new(StringComparer.Ordinal);
 
@@ -19,6 +21,13 @@ internal static class CardArt
         if (Portraits.TryGetValue(refId, out var cached))
         {
             return cached;
+        }
+        // Long sessions can walk the whole codex; keep the cache bounded
+        // (graceful degradation: reload on demand).
+        if (Portraits.Count >= CacheLimit)
+        {
+            Portraits.Clear();
+            Models.Clear();
         }
         Texture2D? texture = null;
         try

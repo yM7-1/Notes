@@ -61,7 +61,7 @@
   "save": "Save",
   "cancel": "Cancel",
   "delete_board_text": "Delete the current board? You can undo this.",
-  "status_hint": "Drag nodes to move · dot or Link mode to branch · right-click menu · wheel to zoom",
+  "status_hint": "F8 hide · [ ] switch board · Ctrl+Z undo · Ctrl+F search · 1/2/3 mark",
   "status_combat": "In combat",
   "status_no_combat": "Not in combat",
   "link_mode": "Link",
@@ -161,7 +161,7 @@
   "empty_current_title": "Nothing recorded yet",
   "empty_current_hint": "Combat actions show up here automatically",
   "empty_board_title": "Empty board",
-  "empty_board_hint": "Drag a card from the right, or hit “Record turn”",
+  "empty_board_hint": "Click a card to place it (Alt+Click = speculated) or drag it in; Ctrl+Click / marquee to multi-select",
   "palette_upgrade_tip": "Right-click toggles upgraded +",
   "load_corrupt": "Notes save was corrupt; backed up as {0} and started fresh",
   "load_newer": "Notes save came from a newer version; backed up as {0} and started fresh",
@@ -228,5 +228,8 @@
   "quick_actions_title": "Handle quick actions",
   "quick_act_record": "Record turn",
   "quick_act_copy": "Copy → new line",
-  "quick_act_settings": "Open settings"
+  "quick_act_settings": "Open settings",
+  "compare_turns": "Turns",
+  "settings_export_dir": "Export folder (Markdown + PNG)",
+  "settings_open_export": "Open folder"
 }

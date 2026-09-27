@@ -100,4 +100,17 @@ public class NotesCompareTests
         Assert.False(NotesCompare.TurnDelta(board, line, 1)!.HasPrevious);
         Assert.Null(NotesCompare.TurnDelta(board, line, 9));
     }
+
+    [Fact]
+    public void TurnDelta_MissingHpSnapshot_ReportsNullDelta()
+    {
+        var (board, line) = Line("l");
+        AddTurn(board, line, 1, -1, "Strike");
+        AddTurn(board, line, 2, 60, "Strike");
+
+        var delta = NotesCompare.TurnDelta(board, line, 2)!;
+
+        Assert.True(delta.HasPrevious);
+        Assert.Null(delta.HpDelta);
+    }
 }

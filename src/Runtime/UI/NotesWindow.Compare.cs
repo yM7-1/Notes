@@ -145,10 +145,12 @@ public partial class NotesWindow
                 + (turn.Diverges ? "   ← " + diffMark : "");
             _compareRows.AddItem(text);
         }
-        _compareSummary.Text = comparison.FirstDivergingTurn == 0
+        _compareSummary.Text = (comparison.FirstDivergingTurn == 0
             ? ModLocalization.T("compare_same", "两条世界线完全一致")
             : ModLocalization.T("compare_first_diff", "首个分叉：第 {0} 回合")
-                .Replace("{0}", comparison.FirstDivergingTurn.ToString());
+                .Replace("{0}", comparison.FirstDivergingTurn.ToString()))
+            + "  ·  " + ModLocalization.T("compare_turns", "回合数")
+            + " " + comparison.LeftTurnCount + " / " + comparison.RightTurnCount;
     }
 
     private static string Cell(int nodes, int hp, int damage)

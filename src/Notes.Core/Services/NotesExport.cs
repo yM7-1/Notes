@@ -61,6 +61,15 @@ public static class NotesExport
             sb.Append(" (").Append(node.Cost).Append(')');
         }
         sb.Append('\n');
+        foreach (var annotation in node.Annotations)
+        {
+            sb.Append("  - ").Append(annotation.Text);
+            if (annotation.Count > 1)
+            {
+                sb.Append(" ×").Append(annotation.Count);
+            }
+            sb.Append('\n');
+        }
         if (node.Note.Length > 0)
         {
             sb.Append("  > ").Append(labels.Note).Append(": ")

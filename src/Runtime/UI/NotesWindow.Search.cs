@@ -55,6 +55,9 @@ public partial class NotesWindow
 
     private void OpenSearch()
     {
+        _searchInput.Text = "";
+        _searchResults.Clear();
+        _searchHits.Clear();
         _searchPopup.PopupCentered(new Vector2I(440, 400));
         _searchInput.GrabFocus();
         _searchInput.SelectAll();
