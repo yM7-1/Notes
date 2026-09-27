@@ -47,6 +47,10 @@ public partial class BoardCanvas : Control
 
     public bool SlotHint => _dragActive || _dragNode != null;
 
+    /// <summary>Zoomed far out: hide fine detail (notes, annotation badges,
+    /// card art) so the board stays readable at a glance.</summary>
+    public bool CompactView => _board != null && _board.Zoom < 0.6f;
+
     /// <summary>Nodes picked with Ctrl+Click or the marquee (batch operations).</summary>
     public IReadOnlyCollection<string> MultiSelectedNodeIds => _multiSelect;
 
@@ -73,6 +77,10 @@ public partial class BoardCanvas : Control
 
     /// <summary>Branch under the mouse (hover highlight); empty when none.</summary>
     public string HoverEdgeId { get; private set; } = "";
+
+    /// <summary>Raised when the "compare this line" chip on an overview card
+    /// is clicked; the window opens the compare dialog for that board.</summary>
+    public event Action<string>? CompareRequested;
 
     public void SetBackdrop(Color color)
     {
@@ -433,6 +441,18 @@ public partial class BoardCanvas : Control
 
     private void ClickAt(Vector2 local)
     {
+        if (_board?.Kind == BoardKind.Overview)
+        {
+            foreach (var card in NotesLayout.OverviewCards(NotesRuntime.ActiveDocument))
+            {
+                var (cx, cy, cw, ch) = NotesLayout.OverviewCompareRect(card);
+                if (new Rect2(cx, cy, cw, ch).HasPoint(local))
+                {
+                    CompareRequested?.Invoke(card.BoardId);
+                    return;
+                }
+            }
+        }
         if (TryGetOverviewCardAt(local, out var overviewBoardId))
         {
             NotesRuntime.SetActiveBoard(overviewBoardId);

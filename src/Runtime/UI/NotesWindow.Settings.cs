@@ -33,6 +33,7 @@ public partial class NotesWindow
         title.AddThemeColorOverride("font_color", UiStyle.Accent);
         panel.AddChild(title);
 
+        AddSection(panel, "settings_group_record", "记录");
         _settingsAutoRecord = new CheckBox
         {
             Text = ModLocalization.T("settings_auto_record", "自动记录战斗操作（当前世界线）"),
@@ -46,6 +47,7 @@ public partial class NotesWindow
         };
         panel.AddChild(_settingsAutoRecord);
 
+        AddSection(panel, "settings_group_ui", "界面");
         _settingsMessageLifetime = AddSpinRow(panel,
             ModLocalization.T("settings_message_lifetime", "状态栏提示时长（秒，0=常驻）"), 0, 60, 1);
         _settingsMessageLifetime.ValueChanged += value =>
@@ -99,14 +101,12 @@ public partial class NotesWindow
             }
         };
 
-        var quickTitle = new Label { Text = ModLocalization.T("quick_actions_title", "悬浮球快捷动作") };
-        quickTitle.AddThemeFontSizeOverride("font_size", 11);
-        quickTitle.AddThemeColorOverride("font_color", UiStyle.TextDim);
-        panel.AddChild(quickTitle);
+        AddSection(panel, "quick_actions_title", "悬浮球快捷动作");
         _settingsQuickRecord = MakeQuickCheck(panel, "quick_act_record", "记本回合", 1);
         _settingsQuickCopy = MakeQuickCheck(panel, "quick_act_copy", "复制→新线", 2);
         _settingsQuickSettings = MakeQuickCheck(panel, "quick_act_settings", "打开设置", 4);
 
+        AddSection(panel, "settings_group_export", "导出");
         var exportRow = new HBoxContainer();
         exportRow.AddThemeConstantOverride("separation", 8);
         var exportLabel = new Label
@@ -146,6 +146,14 @@ public partial class NotesWindow
         row.AddChild(spin);
         parent.AddChild(row);
         return spin;
+    }
+
+    private static void AddSection(VBoxContainer parent, string key, string fallback)
+    {
+        var label = new Label { Text = ModLocalization.T(key, fallback) };
+        label.AddThemeFontSizeOverride("font_size", 11);
+        label.AddThemeColorOverride("font_color", UiStyle.Accent);
+        parent.AddChild(label);
     }
 
     /// <summary>One quick-action toggle (bit in <c>QuickActionsMask</c>).</summary>

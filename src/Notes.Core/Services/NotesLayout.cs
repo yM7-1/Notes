@@ -247,6 +247,11 @@ public static class NotesLayout
         return slots;
     }
 
+    /// <summary>Hit rect (x, y, w, h) of the "compare this line" chip on an
+    /// overview card; shared by the drawing and the hit-test.</summary>
+    public static (float X, float Y, float Width, float Height) OverviewCompareRect(OverviewCard card) =>
+        (card.X + 10, card.Y + card.Height - 28, 92, 20);
+
     /// <summary>Tidy grid for free (non-structured) nodes. On a structured board
     /// the grid starts to the right of the region columns so it never overlaps
     /// them. Returns how many nodes were re-arranged.</summary>

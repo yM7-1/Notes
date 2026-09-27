@@ -37,6 +37,18 @@ internal static partial class NotesRuntime
         _quickActionsMask = data.QuickActionsMask;
         Commands.Limit = Math.Clamp(data.UndoLimit, 10, 2000);
     }
+    private static int _onboardingSteps;
+
+    /// <summary>One-step onboarding hints already shown.</summary>
+    public static int OnboardingSteps => _onboardingSteps;
+
+    /// <summary>Marks one onboarding hint as shown (persisted per profile).</summary>
+    public static void MarkOnboardingStep(int bit)
+    {
+        _onboardingSteps |= bit;
+        UpdateSettings(data => data.OnboardingSteps |= bit);
+    }
+
     /// <summary>Mutates + persists one setting and applies it immediately.</summary>
     public static void UpdateSettings(Action<NotesGlobalData> mutate)
     {

@@ -135,6 +135,12 @@ internal static partial class NotesRuntime
             return;
         }
         Commands.Execute(new CompositeCommand(commands, "SetState"));
+        if (state != NodeState.None && (_onboardingSteps & 4) == 0)
+        {
+            MarkOnboardingStep(4);
+            SetImportMessage(ModLocalization.T("hint_mark",
+                "提示：可在「自由总览」对比两条世界线的差异"));
+        }
         Raise();
     }
 
@@ -829,6 +835,12 @@ internal static partial class NotesRuntime
         _runDirty = true;
         FlushSave();
         Raise();
+        if ((_onboardingSteps & 1) == 0)
+        {
+            MarkOnboardingStep(1);
+            SetImportMessage(ModLocalization.T("hint_record",
+                "提示：点悬浮球「记本回合」把本回合记到笔记"));
+        }
     }
 
     private static string CombatKeyOf(CombatState state)
@@ -980,7 +992,13 @@ internal static partial class NotesRuntime
             SetLibrary(NotesLibrary.Run);
         }
         Commands.Execute(new AddBoardCommand(document, copy));
-        SetImportMessage(ModLocalization.T("copy_done", "已复制到") + " " + copy.Name);
+        var copyMessage = ModLocalization.T("copy_done", "已复制到") + " " + copy.Name;
+        if ((_onboardingSteps & 2) == 0)
+        {
+            copyMessage += "  ·  " + ModLocalization.T("hint_place", "提示：点击右侧卡牌即可放置");
+            MarkOnboardingStep(2);
+        }
+        SetImportMessage(copyMessage);
         MegaCrit.Sts2.Core.Logging.Log.Info($"[Notes] copy current line -> {copy.Name}");
         Raise();
     }

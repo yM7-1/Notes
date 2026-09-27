@@ -158,22 +158,27 @@ public partial class NodeControl : Control
 
         var textX = 18f;
         var glyph = UiStyle.KindGlyph(_node.Kind);
+        var compact = _canvas.CompactView;
         if (_node.Kind == NodeKind.Card)
         {
             textX = 48f;
-            var portrait = CardArt.Portrait(_node.RefId);
+            var portrait = compact ? null : CardArt.Portrait(_node.RefId);
             if (portrait != null)
             {
-                DrawTextureRect(portrait, new Rect2(6, 7, 42, Size.Y - 14), false);
-                textX = 56f;
+                DrawTextureRect(portrait, new Rect2(6, 9, 34, Size.Y - 18), false);
+                textX = 46f;
             }
-            var costCenter = new Vector2(30, portrait != null ? Size.Y - 14f : Size.Y / 2f);
-            DrawCircle(costCenter, 12.5f, UiStyle.BadgeBg);
-            DrawCircle(costCenter, 12.5f, UiStyle.RarityColor(_node.Rarity), false, 1.6f);
+            // Cost pill sits beside the title, never on top of the art.
+            var costRect = new Rect2(textX, 9, 26, 18);
+            _badge.SetCornerRadiusAll(6);
+            _badge.BgColor = UiStyle.BadgeBg;
+            _badge.BorderColor = UiStyle.RarityColor(_node.Rarity);
+            DrawStyleBox(_badge, costRect);
             var costText = _node.Cost < 0 ? "X" : _node.Cost.ToString();
-            var costSize = font.GetStringSize(costText, HorizontalAlignment.Left, -1, 13);
-            DrawString(font, costCenter + new Vector2(-costSize.X / 2f, costSize.Y / 2f - 3f), costText,
-                HorizontalAlignment.Left, -1, 13, UiStyle.TextMain);
+            var costSize = font.GetStringSize(costText, HorizontalAlignment.Left, -1, 12);
+            DrawString(font, costRect.Position + new Vector2((costRect.Size.X - costSize.X) / 2f, 13), costText,
+                HorizontalAlignment.Left, -1, 12, UiStyle.TextMain);
+            textX += 32f;
         }
         else if (glyph.Length > 0)
         {
@@ -187,11 +192,12 @@ public partial class NodeControl : Control
         }
 
         var hasNote = !string.IsNullOrWhiteSpace(_node.Note);
+        var showNote = hasNote && !compact && (_hover || selected || _dragging);
         var maxWidth = NodeWidth - textX - (_node.State == NodeState.None ? 16f : 34f);
         var title = UiStyle.Ellipsize(_node.Title + (_node.Upgraded ? "+" : ""), font, 13, maxWidth);
         DrawString(font, new Vector2(textX, hasNote ? 27 : Size.Y / 2f + 5f), title,
             HorizontalAlignment.Left, -1, 13, UiStyle.TextMain);
-        if (hasNote)
+        if (showNote)
         {
             var snippet = UiStyle.Ellipsize(_node.Note.Replace('\n', ' '), font, 10, maxWidth);
             DrawString(font, new Vector2(textX, 46), snippet, HorizontalAlignment.Left, -1, 10, UiStyle.TextDim);
@@ -216,8 +222,9 @@ public partial class NodeControl : Control
                 stateGlyph, HorizontalAlignment.Left, -1, 11, stateColor);
         }
 
-        // Annotation count badge (details are shown in the inspector on hover).
-        if (_node.Annotations.Count > 0)
+        // Annotation count badge: only while hovered / selected / dragged (the
+        // inspector shows the details), and never in compact zoom.
+        if (_node.Annotations.Count > 0 && !compact && (_hover || selected || _dragging))
         {
             var badgeCenter = new Vector2(Size.X - 12, Size.Y - 12);
             var accent = UiStyle.AnnotationColor(_node.Annotations[0].RefId);

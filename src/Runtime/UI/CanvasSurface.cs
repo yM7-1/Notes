@@ -356,6 +356,20 @@ public partial class CanvasSurface : Control
             var jumpSize = font.GetStringSize(jump, HorizontalAlignment.Left, -1, 10);
             DrawString(font, new Vector2(rect.End.X - jumpSize.X - 12, rect.End.Y - 10), jump,
                 HorizontalAlignment.Left, -1, 10, hovered ? UiStyle.Accent : UiStyle.TextDim);
+
+            var (cx, cy, cw, ch) = NotesLayout.OverviewCompareRect(card);
+            var compareRect = new Rect2(cx, cy, cw, ch);
+            var compareHover = compareRect.HasPoint(mouse);
+            DrawRect(compareRect, compareHover
+                ? UiStyle.Accent.Lerp(Color.FromHtml("1e222bd9"), 0.3f)
+                : Color.FromHtml("262b36d9"), true);
+            DrawRect(compareRect, compareHover ? UiStyle.Accent : UiStyle.PanelBorder, false, 1f);
+            var compareText = ModLocalization.T("overview_compare", "对比这条线");
+            var compareSize = font.GetStringSize(compareText, HorizontalAlignment.Left, -1, 10);
+            DrawString(font,
+                compareRect.Position + new Vector2((compareRect.Size.X - compareSize.X) / 2f, 14),
+                compareText, HorizontalAlignment.Left, -1, 10,
+                compareHover ? UiStyle.Accent : UiStyle.TextDim);
         }
     }
 
@@ -413,11 +427,22 @@ public partial class CanvasSurface : Control
         var rect = new Rect2(region.X, region.Y, region.Width, region.Height);
         var selected = NotesRuntime.SelectionKind == NotesSelectionKind.Region
             && NotesRuntime.SelectionId == region.Id;
+        var regionHovered = rect.HasPoint(GetLocalMousePosition());
+        var compact = Scale.X < 0.6f;
         DrawRect(rect, Color.FromHtml("1b1f27cc"), true);
         DrawDashedRect(rect, selected ? UiStyle.Accent : color.Lerp(UiStyle.PanelBorder, 0.45f), selected ? 2.5f : 1.5f);
 
+        // Title bar: a stronger header so turns are scannable at a glance.
+        DrawRect(new Rect2(region.X, region.Y, region.Width, 28),
+            new Color(color.R, color.G, color.B, selected ? 0.22f : 0.12f), true);
         var title = ModLocalization.T("region_turn", "回合") + " " + region.TurnNumber;
-        DrawString(font, new Vector2(region.X + 12, region.Y + 26), title, HorizontalAlignment.Left, -1, 13, color);
+        DrawString(font, new Vector2(region.X + 12, region.Y + 19), title, HorizontalAlignment.Left, -1, 13,
+            selected || regionHovered ? UiStyle.Accent : color);
+
+        if (compact)
+        {
+            return;
+        }
 
         var allChips = region.TurnEvents.Where(e => !UiStyle.IsBoundaryAnnotation(e.RefId)).ToList();
         var chipEvents = allChips.Take(3).ToList();
@@ -448,6 +473,20 @@ public partial class CanvasSurface : Control
                 new Vector2(region.X + 10, stripTop),
                 new Vector2(region.X + region.Width - 10, stripTop),
                 color.Lerp(UiStyle.PanelBorder, 0.55f), 1f);
+            // More than two between-turn notes collapse into one chip; hover or
+            // select the region to expand them.
+            if (boundary.Count > 2 && !regionHovered && !selected)
+            {
+                var summary = ModLocalization.T("boundary_more", "旁注") + " " + boundary.Count;
+                var size = font.GetStringSize(summary, HorizontalAlignment.Left, -1, 10);
+                var box = new Rect2(region.X + 12, stripTop + 4, size.X + 12, 18);
+                _labelBox.BgColor = UiStyle.BadgeBg;
+                _labelBox.BorderColor = UiStyle.PanelBorder;
+                DrawStyleBox(_labelBox, box);
+                DrawString(font, box.Position + new Vector2(6, 13), summary,
+                    HorizontalAlignment.Left, -1, 10, UiStyle.TextDim);
+                return;
+            }
             for (var i = 0; i < boundary.Count; i++)
             {
                 var annotation = boundary[i];

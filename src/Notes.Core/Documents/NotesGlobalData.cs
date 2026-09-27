@@ -49,4 +49,8 @@ public sealed class NotesGlobalData
     /// <summary>Quick actions shown by the floating handle (bit mask:
     /// 1 = record turn, 2 = copy line, 4 = open settings).</summary>
     public int QuickActionsMask { get; set; } = 3;
+
+    /// <summary>One-step onboarding hints already shown (bit mask:
+    /// 1 = record hint, 2 = place hint, 4 = mark hint).</summary>
+    public int OnboardingSteps { get; set; }
 }

@@ -24,6 +24,8 @@ public partial class NotesWindow : Control
     private CardPalette _palette = null!;
     private InspectorPanel _inspector = null!;
     private ConfirmationDialog _deleteConfirm = null!;
+    private PopupPanel _morePopup = null!;
+    private Button _moreButton = null!;
     private string _pendingDeleteBoardId = "";
     private PanelContainer _onboarding = null!;
     private Panel _grip = null!;
@@ -116,6 +118,8 @@ public partial class NotesWindow : Control
         _boardPicker.ItemSelected += OnBoardSelected;
         header.AddChild(_boardPicker);
 
+        header.AddChild(MakeButton(ModLocalization.T("help_button", "?"), OpenHelp,
+            ModLocalization.T("help_tip", "帮助：核心循环与快捷键")));
         header.AddChild(MakeButton(ModLocalization.T("close", "Close"), Hide));
 
         // Row 2: actions in a flow container so they wrap instead of clipping
@@ -125,63 +129,76 @@ public partial class NotesWindow : Control
         actions.AddThemeConstantOverride("v_separation", 6);
         root.AddChild(actions);
 
-        actions.AddChild(MakeButton(ModLocalization.T("board_new", "+ Board"),
-            () => NotesRuntime.NewBoard(), ModLocalization.T("board_new_tip", "新建自由画板")));
-        _deleteBoardButton = MakeButton(ModLocalization.T("board_delete", "Del Board"), ShowDeleteBoard,
-            ModLocalization.T("board_delete_tip", "删除当前画板（系统画板不可删）"));
-        actions.AddChild(_deleteBoardButton);
-        actions.AddChild(MakeButton(ModLocalization.T("world_line_new", "+ World line"),
-            () => NotesRuntime.NewWorldLine(), ModLocalization.T("world_line_new_tip", "新建可交互的世界线画板")));
-        _textButton = MakeButton(ModLocalization.T("add_text", "+ Text"), AddTextHere,
-            ModLocalization.T("add_text_tip", "在视图中心添加文字节点"));
-        actions.AddChild(_textButton);
+        actions.AddChild(MakeButton(ModLocalization.T("copy_current_line", "Copy world line"),
+            () => NotesRuntime.CopyCurrentToNewLine(), ModLocalization.T("quick_copy_line_tip", "把当前世界线复制成可交互的世界线画板")));
         actions.AddChild(MakeButton(ModLocalization.T("import_turn", "Record turn"),
             () => NotesRuntime.Import(currentTurnOnly: true), ModLocalization.T("quick_record_turn_tip", "把本回合操作录入当前世界线（覆盖该回合）")));
-        actions.AddChild(MakeButton(ModLocalization.T("copy_current_line", "Copy → new line"),
-            () => NotesRuntime.CopyCurrentToNewLine(), ModLocalization.T("quick_copy_line_tip", "把当前世界线复制成可交互的世界线画板")));
-        actions.AddChild(MakeButton(ModLocalization.T("ops_clear", "Clear log"),
-            () => NotesRuntime.ClearOps(), ModLocalization.T("ops_clear_tip", "清空本局操作记录")));
-
-        _linkButton = new Button
-        {
-            Text = ModLocalization.T("link_mode", "Link"),
-            ToggleMode = true,
-            TooltipText = ModLocalization.T("link_mode_tip", "Link mode"),
-        };
-        UiStyle.StyleButton(_linkButton, accent: true);
-        _linkButton.Toggled += OnLinkToggled;
-        actions.AddChild(_linkButton);
-
         _undoButton = MakeButton(ModLocalization.T("undo", "Undo"), () =>
         {
             NotesRuntime.Commands.Undo();
             NotesRuntime.Raise();
         }, ModLocalization.T("undo_tip", "撤销 (Ctrl+Z)"));
         actions.AddChild(_undoButton);
+        actions.AddChild(MakeButton(ModLocalization.T("notes_find", "Find"), OpenSearch,
+            ModLocalization.T("notes_find_tip", "搜索当前库的笔记节点并跳转 (Ctrl+F)")));
+        _moreButton = MakeButton(ModLocalization.T("more_button", "更多"), ToggleMoreMenu,
+            ModLocalization.T("more_tip", "更多操作"));
+        actions.AddChild(_moreButton);
 
+        // Secondary actions live in the "More" popup: the main row stays at the
+        // five high-frequency entries (progressive disclosure).
+        _morePopup = new PopupPanel { Name = "MorePopup" };
+        _morePopup.AddThemeStyleboxOverride("panel",
+            UiStyle.Box(UiStyle.PanelBg, UiStyle.PanelBorder, 8, 1, shadow: true));
+        var moreBox = new VBoxContainer { CustomMinimumSize = new Vector2(210, 0) };
+        moreBox.AddThemeConstantOverride("separation", 4);
+        _morePopup.AddChild(moreBox);
+        AddChild(_morePopup);
+
+        AddMore(moreBox, MakeButton(ModLocalization.T("board_new", "New board"),
+            () => NotesRuntime.NewBoard(), ModLocalization.T("board_new_tip", "新建自由画板")));
+        _deleteBoardButton = MakeButton(ModLocalization.T("board_delete", "Delete board"), ShowDeleteBoard,
+            ModLocalization.T("board_delete_tip", "删除当前画板（系统画板不可删）"));
+        AddMore(moreBox, _deleteBoardButton);
+        AddMore(moreBox, MakeButton(ModLocalization.T("world_line_new", "New world line"),
+            () => NotesRuntime.NewWorldLine(), ModLocalization.T("world_line_new_tip", "新建可交互的世界线画板")));
+        _textButton = MakeButton(ModLocalization.T("add_text", "Add text"), AddTextHere,
+            ModLocalization.T("add_text_tip", "在视图中心添加文字节点"));
+        AddMore(moreBox, _textButton);
+        _linkButton = new Button
+        {
+            Text = ModLocalization.T("link_mode", "Link mode"),
+            ToggleMode = true,
+            TooltipText = ModLocalization.T("link_mode_tip", "Link mode"),
+        };
+        UiStyle.StyleButton(_linkButton, accent: true);
+        _linkButton.Toggled += OnLinkToggled;
+        AddMore(moreBox, _linkButton);
         _redoButton = MakeButton(ModLocalization.T("redo", "Redo"), () =>
         {
             NotesRuntime.Commands.Redo();
             NotesRuntime.Raise();
         }, ModLocalization.T("redo_tip", "重做 (Ctrl+Y)"));
-        actions.AddChild(_redoButton);
-
-        actions.AddChild(MakeButton(ModLocalization.T("notes_find", "Find"), OpenSearch,
-            ModLocalization.T("notes_find_tip", "搜索当前库的笔记节点并跳转 (Ctrl+F)")));
-        actions.AddChild(MakeButton(ModLocalization.T("settings_button", "设置"), OpenSettings,
-            ModLocalization.T("settings_tip", "自动记录 / 提示时长 / 撤销步数 / 默认库 / 图鉴上限")));
-        actions.AddChild(MakeButton(ModLocalization.T("notes_compare", "对比"), OpenCompare,
+        AddMore(moreBox, _redoButton);
+        AddMore(moreBox, MakeButton(ModLocalization.T("ops_clear", "Clear log"),
+            () => NotesRuntime.ClearOps(), ModLocalization.T("ops_clear_tip", "清空本局操作记录")));
+        AddMore(moreBox, MakeButton(ModLocalization.T("notes_compare", "Compare"), OpenCompare,
             ModLocalization.T("notes_compare_tip", "按回合对比两条世界线（标出分叉点）")));
-        actions.AddChild(MakeButton(ModLocalization.T("arrange_button", "整理"), () => NotesRuntime.ArrangeBoard(),
+        AddMore(moreBox, MakeButton(ModLocalization.T("arrange_button", "Tidy"), () => NotesRuntime.ArrangeBoard(),
             ModLocalization.T("arrange_tip", "把自由节点排成整齐网格（可撤销）")));
-        actions.AddChild(MakeButton(ModLocalization.T("export_button", "导出"), ExportBoard,
+        AddMore(moreBox, MakeButton(ModLocalization.T("export_button", "Export"), ExportBoard,
             ModLocalization.T("export_tip", "导出当前画板为 Markdown + PNG（user://notes-export）")));
-        actions.AddChild(MakeButton(ModLocalization.T("reset_view", "Reset"),
+        AddMore(moreBox, MakeButton(ModLocalization.T("reset_view", "Reset view"),
             () => _canvas.ResetView(), ModLocalization.T("reset_view_tip", "重置缩放与平移")));
+        AddMore(moreBox, MakeButton(ModLocalization.T("settings_button", "Settings"), OpenSettings,
+            ModLocalization.T("settings_tip", "自动记录 / 提示时长 / 撤销步数 / 默认库 / 图鉴上限")));
 
         BuildSearch();
         BuildSettings();
         BuildCompare();
+        BuildHelp();
+        BuildCommands();
+        _canvas.CompareRequested += boardId => OpenCompare(boardId);
 
         // First-run guide (once per profile): explains the core loop.
         _onboarding = new PanelContainer { Visible = false };
@@ -415,7 +432,19 @@ public partial class NotesWindow : Control
             GetViewport().SetInputAsHandled();
             return;
         }
+        if (@event is InputEventJoypadButton pad && pad.Pressed && pad.ButtonIndex == JoyButton.Y)
+        {
+            OpenCommands();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         var ctrl = key.CtrlPressed || key.MetaPressed;
+        if (ctrl && key.Keycode == Key.K)
+        {
+            OpenCommands();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (!ctrl && !key.AltPressed
             && key.Keycode is Key.Bracketleft or Key.Bracketright)
         {
@@ -585,33 +614,34 @@ public partial class NotesWindow : Control
             var combat = GameContext.InCombat
                 ? ModLocalization.T("status_combat", "In combat")
                 : ModLocalization.T("status_no_combat", "Not in combat");
-            string hint;
+            var turn = NotesRuntime.CurrentTurn;
+            var segment1 = combat
+                + (turn > 0
+                    ? " · " + ModLocalization.T("status_turn", "第 {0} 回合").Replace("{0}", turn.ToString())
+                    : "")
+                + " · " + ModLocalization.T("status_steps", "{0} 步").Replace("{0}", NotesRuntime.OpsCount.ToString());
+            string mode;
             if (readOnly)
             {
-                hint = ModLocalization.T("status_readonly",
-                    "当前世界线为自动记录（只读）：用「复制→新世界线」创建可交互画板");
+                mode = ModLocalization.T("status_mode_readonly", "只读");
             }
             else if (_canvas.MultiSelectedNodeIds.Count > 1)
             {
-                hint = ModLocalization.T("status_multi", "已选")
-                    + " " + _canvas.MultiSelectedNodeIds.Count + " "
-                    + ModLocalization.T("status_multi_nodes", "个节点：拖动 / 1-3 标记 / Delete 删除 / Esc 取消");
+                mode = ModLocalization.T("status_multi", "已选") + " " + _canvas.MultiSelectedNodeIds.Count;
             }
             else if (_canvas.LinkMode)
             {
-                hint = _canvas.IsLinking
-                    ? ModLocalization.T("status_link_source", "Pick a target to finish the branch (Esc to exit)")
-                    : ModLocalization.T("status_link_hint", "Link mode: click the source node, then the target");
+                mode = _canvas.IsLinking
+                    ? ModLocalization.T("status_link_source", "连线：选择目标")
+                    : ModLocalization.T("status_mode_link", "连线模式");
             }
             else
             {
-                hint = ModLocalization.T("status_hint", "");
+                mode = ModLocalization.T("status_mode_edit", "编辑");
             }
             var import = NotesRuntime.LastImportMessage;
-            _status.Text = combat
-                + "  ·  " + ModLocalization.T("status_ops", "Ops") + " " + NotesRuntime.OpsCount
-                + "  ·  " + hint
-                + (import.Length > 0 ? "  ·  " + import : "");
+            _status.Text = segment1 + "   |   " + mode
+                + (import.Length > 0 ? "   |   " + import : "");
             _status.TooltipText = _status.Text;
         }
         finally
@@ -828,6 +858,24 @@ public partial class NotesWindow : Control
         _deleteConfirm.DialogText = ModLocalization.T("delete_board_text", "Delete the current board?")
             + "\n" + board.Name;
         _deleteConfirm.PopupCentered(new Vector2I(380, 140));
+    }
+
+    private void AddMore(Control parent, Button button)
+    {
+        button.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        button.Pressed += () => _morePopup.Hide();
+        parent.AddChild(button);
+    }
+
+    private void ToggleMoreMenu()
+    {
+        if (_morePopup.Visible)
+        {
+            _morePopup.Hide();
+            return;
+        }
+        var pos = (Vector2I)(_moreButton.GlobalPosition + new Vector2(0, _moreButton.Size.Y + 2));
+        _morePopup.Popup(new Rect2I(pos, Vector2I.Zero));
     }
 
     private static Button MakeButton(string text, Action onPressed, string? tooltip = null)

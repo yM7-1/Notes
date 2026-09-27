@@ -38,10 +38,19 @@ public partial class NotesWindow
         _compareLeft = MakeComparePicker(pickers, ModLocalization.T("compare_left", "左"));
         _compareRight = MakeComparePicker(pickers, ModLocalization.T("compare_right", "右"));
 
+        var header = new Label
+        {
+            Text = ModLocalization.T("compare_header", "回合      左  ⇄  右"),
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        header.AddThemeFontSizeOverride("font_size", 10);
+        header.AddThemeColorOverride("font_color", UiStyle.TextDim);
+        panel.AddChild(header);
         _compareRows = new ItemList
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
             CustomMinimumSize = new Vector2(0, 260),
+            SameColumnWidth = true,
         };
         panel.AddChild(_compareRows);
 
@@ -71,7 +80,9 @@ public partial class NotesWindow
         return picker;
     }
 
-    private void OpenCompare()
+    private void OpenCompare() => OpenCompare(null);
+
+    private void OpenCompare(string? preferBoardId)
     {
         _compareLines.Clear();
         var document = NotesRuntime.ActiveDocument;
@@ -101,12 +112,17 @@ public partial class NotesWindow
                 _compareRight.AddItem(name);
             }
             var activeIndex = _compareLines.FindIndex(l => l.BoardId == NotesRuntime.ActiveBoard.Id);
-            _compareLeft.Selected = 0;
-            _compareRight.Selected = activeIndex > 0 ? activeIndex : 1;
-            if (_compareRight.Selected == _compareLeft.Selected)
+            var preferIndex = preferBoardId == null
+                ? -1
+                : _compareLines.FindIndex(l => l.BoardId == preferBoardId);
+            var left = 0;
+            var right = preferIndex >= 0 ? preferIndex : activeIndex > 0 ? activeIndex : 1;
+            if (right == left)
             {
-                _compareRight.Selected = 1;
+                right = left == 0 ? 1 : 0;
             }
+            _compareLeft.Selected = left;
+            _compareRight.Selected = right;
         }
         finally
         {
