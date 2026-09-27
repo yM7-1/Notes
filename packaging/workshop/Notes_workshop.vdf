@@ -30,9 +30,18 @@
 [h2]顺手交互[/h2]
 [list]
 [*]悬浮按钮 / F8 开合面板；按钮可拖动、可收拢为屏幕两侧小箭头
-[*]按钮下快捷操作：记本回合 / 复制→新线
-[*]窗口自由拉伸；画布缩放 0.5–3x、平移
-[*]界面中英双语
+[*]按钮下快捷操作可自定义（记本回合 / 复制→新线 / 打开设置）
+[*]窗口自由拉伸；画布缩放 0.5–3x、平移；界面中英双语
+[*]点击卡牌即放置（Alt=推测 / Shift=已尝试）；Ctrl+点击或框选多选，批量拖动/标记/删除
+[*]1/2/3 快速标记、Delete 删除、Enter 编辑、Ctrl+F 搜索笔记、[ ] 翻板
+[/list]
+
+[h2]复盘与分享[/h2]
+[list]
+[*]世界线对比：按回合对齐两条世界线，标出首个分叉点
+[*]战斗结束自动生成「复盘」板（伤害/战损/击杀/每回合摘要），跨战斗保留
+[*]导出 Markdown + PNG 到本地目录，或一键复制 Markdown 到剪贴板
+[*]设置页：自动记录开关、提示时长、撤销步数、默认库、图鉴上限
 [/list]
 
 [h2]依赖 / 兼容[/h2]
@@ -43,6 +52,6 @@
 
 [h2]English[/h2]
 In-combat world-line notebook for Slay the Spire 2. Your current world line is auto-recorded: every card, potion, draw/discard/exhaust and end-of-turn step, with the hand you had, the state at that moment, targets and damage dealt, numbered same-name enemies, and between-turn notes (enemy card insertions, HP lost). Copy it into an editable world-line board to branch, speculate and annotate. Requires RitsuLib ≥ 0.6.2."
-	"changenote"        "v0.8.0：安全与数据修复（怪物行动保护/损坏存档隔离/纯本地+防串档）、首次使用引导、悬浮按钮反馈、只读标识与节点提示、撤销作用域、捕获合并与悬停优化、45 单测"
+	"changenote"        "v0.9.0：全新体验批次——点击/Alt/Shift 快捷放置、键盘与多选批量、卡面缩略图、世界线对比、战斗复盘板、笔记搜索、自动整理、Markdown+PNG 导出与剪贴板、设置页、手柄焦点流；i18n 键校验 + 66 单测"
 	"visibility"		"0"
 }
