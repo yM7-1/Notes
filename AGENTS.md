@@ -13,21 +13,23 @@
 - **不要自动上传/更新创意工坊**：任何工坊更新前必须先询问用户。上传流程见 `steam-workshop-upload` skill。
 - 三处版本号需同步：`Notes.csproj`、`Notes.json`、`packaging/workshop/content/Notes/Notes.json`。
 
-## 交接状态（2026-09-26，新会话从这里开始）
+## 交接状态（2026-09-27，新会话从这里开始）
 
 ### 当前进度
-- **版本 v0.8.0，已上架创意工坊**（ID `3808343573`，线上 changelog 已验证 v0.8.0）。
-  仓库 HEAD = `2e873b2`（第二轮 5-8 轮 + v0.8.0），前一批 = `e57c4e6`，均已 push。
-- 两轮自动迭代共 18 轮全部完成、0 受阻：v0.7.0（UX/UI 大波 + 链接/数据修复，10 轮）、
-  v0.8.0（安全/数据完整性 + 新玩家引导 + 性能/结构，8 轮）。
-- 单测 45 个；`bash tools/check.sh` 现在会校验三处版本号 + VDF changenote 含版本号。
+- **版本 v0.10.0，已上架创意工坊**（ID `3808343573`；线上 changelog 已验证 v0.10.0，
+  v0.9.0 / v0.8.0 记录保留）。仓库 HEAD = `3fd3b95`，均已 push。
+- 发布记录：v0.9.0（遗留清理 + 体验扩展，`8b60792`）→ v0.10.0（UX 可读性与上手优化，`3fd3b95`），
+  两次工坊上传均验证过线上 changelog。
+- autopilot 第二轮（UX 优化）已完成 **rounds 1-4 / 20**，10 项 UX 目标全部达成，进入扩展阶段；
+  状态在 `.autopilot/`（见下方「UX 可读性优化」恢复方式）。
+- 单测 **66** 个；`bash tools/check.sh` 校验：双版本构建 + 单测 + 三处版本号 + VDF changenote + i18n 键对齐。
 - **游戏当前跑的是工坊订阅版**；本地 `mods/Notes` 已删除（避免 DUPLICATE_ID），
-  要实机验证必须更新工坊（先问用户）或临时本地部署并退订。
+  要实机验证更新工坊（先问用户）或临时本地部署并退订。
 
-### 未完成（backlog，2026-09-27 autopilot 15 轮后）
-1. 实机验收 / 工坊更新：本轮所有改动未实机验证；工坊更新前先问用户
-2. 手柄实机验证（静态已实现，见下方验收清单）
-3. 焦点顺序微调（依赖 Godot 空间邻居，实机看是否别扭）
+### 未完成（2026-09-27，v0.10.0 后）
+1. 60 秒主路径实机验收（复制→点牌→标记✔）；全部 UI 改动尚未实机验证
+2. 手柄实机验证（静态已实现，见下方验收清单）；焦点顺序可能需微调
+3. autopilot 第二轮剩余 16 轮（扩展阶段自选优化，恢复方式见文末）
 4. 长期方向：RitsuLib `[ModSettingsPage]` 集成、大盘面性能观察
 
 ### 2026-09-27 体验扩展（autopilot rounds 1-15）
@@ -38,7 +40,7 @@
   文案收尾、README/CHANGELOG/交接文档
 - 工程：NotesRuntime/BoardCanvas 拆分 partial、i18n 键对齐入 check.sh、单测 45→66
 - 提交：`51a0a4d`（遗留清理）→ `d62c661`（批次1）→ `396fea6`（批次2）→ `9211a44`（批次3）
-- 版本仍 v0.8.0（工坊 DLL 未重建，发布需用户确认后走 `steam-workshop-upload`）
+- 该批改动含在 v0.9.0 发布（工坊已更新，`8b60792`）
 
 ### 手柄导航验收清单（静态已实现，实机待验）
 1. 手柄连接时窗口打开：焦点落在画板选择器；方向键移动焦点，A 确认，B/Esc 返回
@@ -47,12 +49,12 @@
 4. 链接模式 / 多选时：B/Esc 先取消，再关闭窗口；折叠把手 A 展开
 5. 焦点顺序不理想时检查 `FocusMode`（Button 默认 All，NodeControl=Click）与容器布局
 
-### 2026-09-27 遗留清理（版本仍 v0.8.0，未上传工坊）
+### 2026-09-27 遗留清理（含在 v0.9.0）
 - 已完成原清单 1–9：Normalize 画板去重 + 幂等修复、提示 8s 过期、
   `publish.sh` 版本标签、注释协议 `AnnotationProtocol`、世界线创建走命令栈（Ctrl+Z 可撤）、
   `CardCatalog` 失败不缓存、删板确认框快照目标板、折叠箭头 tooltip、`BoardCanvas.Menus.cs` 拆分
 - 单测 45 → 52；`bash tools/check.sh` 全绿（双版本构建 0 warning）
-- 工坊 DLL 未重建（代码改动未发布）；发布时先问用户再走 `steam-workshop-upload` skill
+- 工坊已在 v0.9.0 发布；流程见 `steam-workshop-upload` skill（上传前问用户）
 
 ### 关键注意事项（本轮踩过的坑）
 - 工坊上传：`/mnt/d/steamcmd/steamcmd.exe +login lwh4646 +workshop_build_item 'D:\0_git\Notes\packaging\workshop\Notes_workshop.vdf' +quit`；
@@ -116,14 +118,14 @@
 - M1：画布/节点/连线/状态标记/撤销重做/本局+全局持久化/i18n
 - v0.2.0：节点拖动跟手修复（全局鼠标坐标）、「连线」模式、贝塞尔分支 + 点阵网格 +
   圆角节点美化、右侧居中可拖动开关把手（位置持久化 `NotesGlobalData.ButtonX/Y`）
-- 待办：见上方「交接状态 → 未完成」清单（实机验收、卡面缩略图 atlas、设置页
-  RitsuLib `[ModSettingsPage]` 仍为长期方向）
+- 待办：见上方「交接状态 → 未完成」清单（实机验收、手柄实机、RitsuLib 设置页仍为长期方向）
 
 ### 2026-09-27 UX 可读性优化（autopilot 第二轮，rounds 1-4/20，可续跑）
-- 用户反馈「可读性差、功能繁杂」→ 10 项目标已全部达成：工具栏两级（一级 5 键+更多）、术语与按钮文案统一、
+- 用户反馈「可读性差、功能繁杂」→ 10 项目标全部达成：工具栏两级（一级 5 键+更多）、术语与按钮文案统一、
   状态栏三段式；总览卡片「对比这条线」+帮助面板（?）+一步一提示；节点卡简洁模式（费用药丸/悬停备注/注解徽章）+
   回合标题条+旁注折叠 chip+缩放 LOD；设置分组+对比表头；Ctrl+K 命令面板；静态验收（可见按钮 5、无简称）
-- 提交 `dfae8e8`（批次1）；259 i18n 键、66 单测、check.sh 全绿
-- 剩余 16 轮为扩展阶段（自选方向）：`config.max_rounds=20` 已设；backlog 为空 → 先 `mine --apply` 或 Deep Expansion
-  （注意：mine 会灌 ~50 条 hotspot 噪声候选，可批量删后再选真实候选项）
-- 待办：60 秒主路径实机验收、手柄实机；未做 UI 实机验证
+- 发布：`dfae8e8`（批次1）→ **v0.10.0 工坊已更新**（`3fd3b95`）；259 i18n 键、66 单测、check.sh 全绿
+- **恢复方式**：`.autopilot/config.json` 已是 `max_rounds=20`；直接
+  `round-prep → begin-round --candidate-id …` 从 round 5 续跑。backlog 当前为空 → 先 `mine --apply`
+  或 Deep Expansion（注意：mine 会灌 ~50 条 hotspot 噪声候选，可批量删后再选真实候选项）
+- 待办：60 秒主路径实机验收、手柄实机；UI 改动未实机验证
