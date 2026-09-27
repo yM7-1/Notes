@@ -26,6 +26,14 @@ public partial class CanvasSurface : Control
     private NotesBoard? _board;
     private readonly Dictionary<string, NodeControl> _nodes = new(StringComparer.Ordinal);
     private StyleBoxFlat _labelBox = new();
+    private Rect2? _marquee;
+
+    /// <summary>Selection rectangle while marquee-dragging (surface-local coords).</summary>
+    public void SetMarquee(Rect2? rect)
+    {
+        _marquee = rect;
+        QueueRedraw();
+    }
 
     public void Setup(BoardCanvas canvas)
     {
@@ -212,6 +220,13 @@ public partial class CanvasSurface : Control
         if (_board == null)
         {
             return;
+        }
+
+        if (_marquee is { } marquee)
+        {
+            var rect = new Rect2(marquee.Position, marquee.Size);
+            DrawRect(rect, new Color(UiStyle.Accent.R, UiStyle.Accent.G, UiStyle.Accent.B, 0.12f), true);
+            DrawRect(rect, UiStyle.Accent, false, 1f);
         }
 
         if (_board.Kind == BoardKind.Overview)

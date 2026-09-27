@@ -12,4 +12,8 @@ public enum BoardKind
     /// <summary>Read-only board auto-recorded from the live operation log; a
     /// snapshot of it can be copied into an interactive world-line board.</summary>
     Current = 3,
+
+    /// <summary>Post-combat recap board generated at the end of a fight and
+    /// carried over across combats of the same run (editable).</summary>
+    Summary = 4,
 }

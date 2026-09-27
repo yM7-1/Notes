@@ -10,7 +10,17 @@ public sealed class CommandStack
     private readonly List<INotesCommand> _done = new();
     private readonly List<INotesCommand> _undone = new();
 
-    public int Limit { get; init; } = 200;
+    private int _limit = 200;
+
+    public int Limit
+    {
+        get => _limit;
+        set
+        {
+            _limit = Math.Clamp(value, 1, 10000);
+            Trim();
+        }
+    }
 
     public bool CanUndo => _done.Count > 0;
 

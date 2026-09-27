@@ -28,4 +28,25 @@ public sealed class NotesGlobalData
 
     /// <summary>The first-run "how it works" strip was dismissed.</summary>
     public bool OnboardingSeen { get; set; }
+
+    /// <summary>Capture combat operations automatically (the read-only current
+    /// world line is derived from them). Off = a purely manual notebook.</summary>
+    public bool AutoRecordOps { get; set; } = true;
+
+    /// <summary>Status-bar feedback lifetime in seconds; 0 keeps it until the
+    /// next message replaces it.</summary>
+    public double MessageLifetimeSeconds { get; set; } = 8;
+
+    /// <summary>Undo stack depth.</summary>
+    public int UndoLimit { get; set; } = 200;
+
+    /// <summary>Library shown when a run starts: 0 = run, 1 = global.</summary>
+    public int DefaultLibrary { get; set; }
+
+    /// <summary>Maximum rows the card codex search returns.</summary>
+    public int CodexLimit { get; set; } = 120;
+
+    /// <summary>Quick actions shown by the floating handle (bit mask:
+    /// 1 = record turn, 2 = copy line, 4 = open settings).</summary>
+    public int QuickActionsMask { get; set; } = 3;
 }

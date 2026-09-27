@@ -32,7 +32,7 @@ public partial class CardPalette : PanelContainer
     private double _timer;
     private string _signature = "";
 
-    public event Action<CardSnapshot>? CardActivated;
+    public event Action<CardSnapshot, bool>? CardActivated;
 
     public override void _Ready()
     {
@@ -235,7 +235,7 @@ public partial class CardPalette : PanelContainer
         var type = _typeFilter.Selected;
         var results = CardCatalog.All
             .Where(card => Matches(card, query, CardCatalog.CostOf(card), type))
-            .Take(120)
+            .Take(NotesRuntime.CodexLimit)
             .ToList();
         if (results.Count == 0)
         {
@@ -297,7 +297,7 @@ public partial class CardPalette : PanelContainer
     {
         var row = new DragCardButton { Name = "CardRow" };
         row.Setup(snapshot, speculated, count);
-        row.Pressed += () => CardActivated?.Invoke(snapshot);
+        row.Pressed += () => CardActivated?.Invoke(snapshot, row.AltHeld);
         if (key != null)
         {
             row.TooltipText += "\n" + ModLocalization.T("palette_upgrade_tip", "Right-click toggles upgraded +");
@@ -310,6 +310,7 @@ public partial class CardPalette : PanelContainer
                 Refresh(force: true);
             };
         }
+        row.TooltipText += "\n" + ModLocalization.T("palette_click_tip", "Click: add at view center · Alt+Click: add as speculated");
         return row;
     }
 
@@ -353,6 +354,10 @@ public partial class DragCardButton : Button
     private bool _speculated;
     private int _count;
 
+    /// <summary>True when the last left press was made with Alt held
+    /// (the palette adds a speculated legend instead of a plain one).</summary>
+    public bool AltHeld { get; private set; }
+
     public event Action? RightClicked;
 
     public void Setup(CardSnapshot snapshot, bool speculated, int count)
@@ -379,8 +384,14 @@ public partial class DragCardButton : Button
     public override void _GuiInput(InputEvent @event)
     {
         if (@event is InputEventMouseButton button
-            && button.ButtonIndex == MouseButton.Right
+            && button.ButtonIndex == MouseButton.Left
             && button.Pressed)
+        {
+            AltHeld = button.AltPressed;
+        }
+        if (@event is InputEventMouseButton button2
+            && button2.ButtonIndex == MouseButton.Right
+            && button2.Pressed)
         {
             RightClicked?.Invoke();
             AcceptEvent();

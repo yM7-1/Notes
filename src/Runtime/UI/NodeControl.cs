@@ -113,7 +113,8 @@ public partial class NodeControl : Control
         var kindColor = UiStyle.KindColor(_node.Kind, _node.CardType);
         var stateColor = UiStyle.StateColor(_node.State);
         var selected = NotesRuntime.SelectionKind == NotesSelectionKind.Node
-            && NotesRuntime.SelectionId == _node.Id;
+            && NotesRuntime.SelectionId == _node.Id
+            || _canvas.IsNodeSelected(_node.Id);
 
         var border = selected
             ? UiStyle.Accent
@@ -149,7 +150,13 @@ public partial class NodeControl : Control
         if (_node.Kind == NodeKind.Card)
         {
             textX = 48f;
-            var costCenter = new Vector2(30, Size.Y / 2f);
+            var portrait = CardArt.Portrait(_node.RefId);
+            if (portrait != null)
+            {
+                DrawTextureRect(portrait, new Rect2(6, 7, 42, Size.Y - 14), false);
+                textX = 56f;
+            }
+            var costCenter = new Vector2(30, portrait != null ? Size.Y - 14f : Size.Y / 2f);
             DrawCircle(costCenter, 12.5f, UiStyle.BadgeBg);
             DrawCircle(costCenter, 12.5f, UiStyle.RarityColor(_node.Rarity), false, 1.6f);
             var costText = _node.Cost < 0 ? "X" : _node.Cost.ToString();
@@ -256,6 +263,12 @@ public partial class NodeControl : Control
                 if (button.DoubleClick)
                 {
                     _canvas.OpenEditor(_node.Id);
+                    AcceptEvent();
+                    return;
+                }
+                if (button.CtrlPressed || button.MetaPressed)
+                {
+                    _canvas.ToggleNodeSelection(_node.Id);
                     AcceptEvent();
                     return;
                 }

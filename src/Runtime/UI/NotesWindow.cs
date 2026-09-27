@@ -166,8 +166,22 @@ public partial class NotesWindow : Control
         }, ModLocalization.T("redo_tip", "重做 (Ctrl+Y)"));
         actions.AddChild(_redoButton);
 
+        actions.AddChild(MakeButton(ModLocalization.T("notes_find", "Find"), OpenSearch,
+            ModLocalization.T("notes_find_tip", "搜索当前库的笔记节点并跳转 (Ctrl+F)")));
+        actions.AddChild(MakeButton(ModLocalization.T("settings_button", "设置"), OpenSettings,
+            ModLocalization.T("settings_tip", "自动记录 / 提示时长 / 撤销步数 / 默认库 / 图鉴上限")));
+        actions.AddChild(MakeButton(ModLocalization.T("notes_compare", "对比"), OpenCompare,
+            ModLocalization.T("notes_compare_tip", "按回合对比两条世界线（标出分叉点）")));
+        actions.AddChild(MakeButton(ModLocalization.T("arrange_button", "整理"), () => NotesRuntime.ArrangeBoard(),
+            ModLocalization.T("arrange_tip", "把自由节点排成整齐网格（可撤销）")));
+        actions.AddChild(MakeButton(ModLocalization.T("export_button", "导出"), ExportBoard,
+            ModLocalization.T("export_tip", "导出当前画板为 Markdown + PNG（user://notes-export）")));
         actions.AddChild(MakeButton(ModLocalization.T("reset_view", "Reset"),
             () => _canvas.ResetView(), ModLocalization.T("reset_view_tip", "重置缩放与平移")));
+
+        BuildSearch();
+        BuildSettings();
+        BuildCompare();
 
         // First-run guide (once per profile): explains the core loop.
         _onboarding = new PanelContainer { Visible = false };
@@ -205,9 +219,11 @@ public partial class NotesWindow : Control
         body.AddChild(_canvas);
 
         _palette = new CardPalette { SizeFlagsVertical = SizeFlags.ExpandFill };
-        _palette.CardActivated += snapshot =>
-            _canvas.AddCardNode(snapshot, _canvas.ViewCenterInBoardCoords()
-                - new Vector2(NodeControl.NodeWidth / 2f, NodeControl.NodeHeight / 2f));
+        _palette.CardActivated += (snapshot, forceSpeculated) =>
+            _canvas.AddCardNode(snapshot, _canvas.SuggestFreePosition(
+                _canvas.ViewCenterInBoardCoords()
+                - new Vector2(NodeControl.NodeWidth / 2f, NodeControl.NodeHeight / 2f)),
+                speculated: forceSpeculated);
 
         var right = new VBoxContainer
         {
@@ -387,12 +403,19 @@ public partial class NotesWindow : Control
             }
             else
             {
+                _canvas.ClearMultiSelection();
                 Hide();
             }
             GetViewport().SetInputAsHandled();
             return;
         }
         var ctrl = key.CtrlPressed || key.MetaPressed;
+        if (ctrl && key.Keycode == Key.F)
+        {
+            OpenSearch();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (ctrl && key.Keycode == Key.Z)
         {
             if (NotesRuntime.ActiveBoard.IsReadOnly)
@@ -419,6 +442,69 @@ public partial class NotesWindow : Control
             NotesRuntime.Commands.Redo();
             NotesRuntime.Raise();
             GetViewport().SetInputAsHandled();
+        }
+        else if (!ctrl && !key.AltPressed && HandleNodeShortcut(key))
+        {
+            GetViewport().SetInputAsHandled();
+        }
+    }
+
+    /// <summary>1/2/3 mark the selected node(s), 0 clears the mark, Delete removes
+    /// them and Enter opens the editor; ignored while a text field has focus or
+    /// when a button would consume the key. A Ctrl+Click / marquee multi-selection
+    /// is applied in one undo step.</summary>
+    private bool HandleNodeShortcut(InputEventKey key)
+    {
+        var focus = GetViewport().GuiGetFocusOwner();
+        if (focus is LineEdit or TextEdit)
+        {
+            return false;
+        }
+        var board = NotesRuntime.ActiveBoard;
+        if (board.IsReadOnly)
+        {
+            return false;
+        }
+        var multi = _canvas.MultiSelectedNodeIds;
+        var runtimeNode = NotesRuntime.SelectionKind == NotesSelectionKind.Node
+            && NotesRuntime.SelectionId.Length > 0
+            && board.FindNode(NotesRuntime.SelectionId) != null
+            ? board.FindNode(NotesRuntime.SelectionId)
+            : null;
+        if (multi.Count == 0 && runtimeNode == null)
+        {
+            return false;
+        }
+        IReadOnlyCollection<string> targets = multi.Count > 0
+            ? multi
+            : new[] { runtimeNode!.Id };
+        switch (key.Keycode)
+        {
+            case Key.Key1:
+                NotesRuntime.SetNodesState(targets, NodeState.Tried);
+                return true;
+            case Key.Key2:
+                NotesRuntime.SetNodesState(targets, NodeState.Speculated);
+                return true;
+            case Key.Key3:
+                NotesRuntime.SetNodesState(targets, NodeState.Confirmed);
+                return true;
+            case Key.Key0:
+                NotesRuntime.SetNodesState(targets, NodeState.None);
+                return true;
+            case Key.Delete:
+                NotesRuntime.DeleteNodes(targets);
+                _canvas.ClearMultiSelection();
+                return true;
+            case Key.Enter:
+                if (focus is Button)
+                {
+                    return false; // let the focused button handle Enter itself
+                }
+                _canvas.OpenEditor(runtimeNode?.Id ?? targets.First());
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -474,6 +560,12 @@ public partial class NotesWindow : Control
             {
                 hint = ModLocalization.T("status_readonly",
                     "当前世界线为自动记录（只读）：用「复制→新世界线」创建可交互画板");
+            }
+            else if (_canvas.MultiSelectedNodeIds.Count > 1)
+            {
+                hint = ModLocalization.T("status_multi", "已选")
+                    + " " + _canvas.MultiSelectedNodeIds.Count + " "
+                    + ModLocalization.T("status_multi_nodes", "个节点：拖动 / 1-3 标记 / Delete 删除 / Esc 取消");
             }
             else if (_canvas.LinkMode)
             {
@@ -535,6 +627,18 @@ public partial class NotesWindow : Control
                             + (line != null ? "  ·  " + line.Name : ""),
                         ModLocalization.T("inspector_ops", "Ops") + ": " + board.NodesOfRegion(region.Id).Count(),
                     };
+                    if (NotesCompare.TurnDelta(board, region.WorldLineId, region.TurnNumber) is
+                        { HasPrevious: true } delta)
+                    {
+                        var hp = delta.HpDelta is { } hpDelta
+                            ? (hpDelta >= 0 ? "+" + hpDelta : hpDelta.ToString())
+                            : "?";
+                        lines.Add(ModLocalization.T("inspector_turn_delta", "较上回合") + ": HP " + hp
+                            + "   " + ModLocalization.T("inspector_nodes", "Nodes") + " "
+                            + (delta.NodeDelta >= 0 ? "+" : "") + delta.NodeDelta
+                            + "   " + ModLocalization.T("inspector_damage_dealt", "伤害") + " "
+                            + (delta.DamageDelta >= 0 ? "+" : "") + delta.DamageDelta);
+                    }
                     if (region.TurnEvents.Count > 0)
                     {
                         lines.Add(ModLocalization.T("inspector_turn_events", "Turn events") + ":");
@@ -679,8 +783,8 @@ public partial class NotesWindow : Control
 
     private void AddTextHere()
     {
-        _canvas.AddTextNode(_canvas.ViewCenterInBoardCoords()
-            - new Vector2(NodeControl.NodeWidth / 2f, NodeControl.NodeHeight / 2f));
+        _canvas.AddTextNode(_canvas.SuggestFreePosition(_canvas.ViewCenterInBoardCoords()
+            - new Vector2(NodeControl.NodeWidth / 2f, NodeControl.NodeHeight / 2f)));
     }
 
     private void ShowDeleteBoard()

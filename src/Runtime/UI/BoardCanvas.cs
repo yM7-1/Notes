@@ -26,6 +26,13 @@ public partial class BoardCanvas : Control
     private bool _panning;
     private bool _linkMode;
     private bool _dragActive;
+    private readonly HashSet<string> _multiSelect = new(StringComparer.Ordinal);
+    private bool _marqueeActive;
+    private Vector2 _marqueeStart;
+    private Vector2 _marqueeCurrent;
+    private Dictionary<string, Vector2>? _dragGroup;
+    private string _dragGroupAnchor = "";
+    private Vector2 _dragGroupAnchorStart;
     private Color _backdrop = UiStyle.CanvasBg;
     private StyleBoxFlat _trashStyle = new();
     private StyleBoxFlat _zoomStyle = new();
@@ -39,6 +46,30 @@ public partial class BoardCanvas : Control
     public string? ActiveLinkSource => _linkFrom;
 
     public bool SlotHint => _dragActive || _dragNode != null;
+
+    /// <summary>Nodes picked with Ctrl+Click or the marquee (batch operations).</summary>
+    public IReadOnlyCollection<string> MultiSelectedNodeIds => _multiSelect;
+
+    public bool IsNodeSelected(string nodeId) => _multiSelect.Contains(nodeId);
+
+    public void ToggleNodeSelection(string nodeId)
+    {
+        if (!_multiSelect.Add(nodeId))
+        {
+            _multiSelect.Remove(nodeId);
+        }
+        _surface.RefreshNodeDraw();
+    }
+
+    public void ClearMultiSelection()
+    {
+        if (_multiSelect.Count == 0)
+        {
+            return;
+        }
+        _multiSelect.Clear();
+        _surface.RefreshNodeDraw();
+    }
 
     /// <summary>Branch under the mouse (hover highlight); empty when none.</summary>
     public string HoverEdgeId { get; private set; } = "";
@@ -221,6 +252,52 @@ public partial class BoardCanvas : Control
         return (center - _surface.Position) / zoom;
     }
 
+    /// <summary>Nudges a desired node position until it no longer overlaps an
+    /// existing node, so repeated click-adds cascade instead of stacking.</summary>
+    public Vector2 SuggestFreePosition(Vector2 desired)
+    {
+        if (_board == null)
+        {
+            return desired;
+        }
+        var position = desired;
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            var candidate = new Rect2(position.X, position.Y, NodeControl.NodeWidth, NodeControl.NodeHeight);
+            var overlaps = _board.Nodes.Any(n =>
+                new Rect2(n.X, n.Y, NodeControl.NodeWidth, NodeControl.NodeHeight).Intersects(candidate));
+            if (!overlaps)
+            {
+                return position;
+            }
+            position += new Vector2(26, 26);
+        }
+        return position;
+    }
+
+    /// <summary>Pans the view so the node sits in the center of the canvas
+    /// (used by the notes search to jump to a hit).</summary>
+    public void FocusNode(string nodeId)
+    {
+        if (_board == null)
+        {
+            return;
+        }
+        var node = _board.FindNode(nodeId);
+        if (node == null)
+        {
+            return;
+        }
+        var zoom = _board.Zoom <= 0f ? 1f : _board.Zoom;
+        _surface.Position = Size / 2f - new Vector2(
+            node.X + NodeControl.NodeWidth / 2f,
+            node.Y + NodeControl.NodeHeight / 2f) * zoom;
+        _board.PanX = _surface.Position.X;
+        _board.PanY = _surface.Position.Y;
+        ApplyView();
+        NotesRuntime.ScheduleSave();
+    }
+
     public override void _GuiInput(InputEvent @event)
     {
         if (_board == null)
@@ -290,24 +367,23 @@ public partial class BoardCanvas : Control
                     AcceptEvent();
                     return;
                 }
-                var local = _surface.GetLocalMousePosition();
-                if (TryGetOverviewCardAt(local, out var overviewBoardId))
+                _marqueeActive = true;
+                _marqueeStart = _surface.GetLocalMousePosition();
+                _marqueeCurrent = _marqueeStart;
+                AcceptEvent();
+            }
+            else if (!button.Pressed && button.ButtonIndex == MouseButton.Left && _marqueeActive)
+            {
+                _marqueeActive = false;
+                _surface.SetMarquee(null);
+                var size = (_marqueeCurrent - _marqueeStart).Abs();
+                if (size.X > 4f || size.Y > 4f)
                 {
-                    NotesRuntime.SetActiveBoard(overviewBoardId);
-                    AcceptEvent();
-                    return;
-                }
-                if (TryGetRegionAt(local, out var regionId))
-                {
-                    NotesRuntime.SelectRegion(regionId);
-                }
-                else if (TryGetWorldLineAt(local, out var worldLineId))
-                {
-                    NotesRuntime.SelectWorldLine(worldLineId);
+                    SelectInMarquee(new Rect2(_marqueeStart.Min(_marqueeCurrent), size));
                 }
                 else
                 {
-                    NotesRuntime.ClearSelection();
+                    ClickAt(_marqueeStart);
                 }
                 AcceptEvent();
             }
@@ -322,6 +398,12 @@ public partial class BoardCanvas : Control
         }
         else if (@event is InputEventMouseMotion)
         {
+            if (_marqueeActive)
+            {
+                _marqueeCurrent = _surface.GetLocalMousePosition();
+                var size = (_marqueeCurrent - _marqueeStart).Abs();
+                _surface.SetMarquee(new Rect2(_marqueeStart.Min(_marqueeCurrent), size));
+            }
             var hovered = _surface.TryGetEdgeNear(_surface.GetLocalMousePosition(), 8f, out var edgeId)
                 ? edgeId
                 : "";
@@ -330,6 +412,43 @@ public partial class BoardCanvas : Control
                 HoverEdgeId = hovered;
                 _surface.QueueRedraw();
             }
+        }
+    }
+
+    private void SelectInMarquee(Rect2 rect)
+    {
+        _multiSelect.Clear();
+        if (_board != null)
+        {
+            foreach (var node in _board.Nodes)
+            {
+                if (rect.Intersects(new Rect2(node.X, node.Y, NodeControl.NodeWidth, NodeControl.NodeHeight)))
+                {
+                    _multiSelect.Add(node.Id);
+                }
+            }
+        }
+        _surface.RefreshNodeDraw();
+    }
+
+    private void ClickAt(Vector2 local)
+    {
+        if (TryGetOverviewCardAt(local, out var overviewBoardId))
+        {
+            NotesRuntime.SetActiveBoard(overviewBoardId);
+            return;
+        }
+        if (TryGetRegionAt(local, out var regionId))
+        {
+            NotesRuntime.SelectRegion(regionId);
+        }
+        else if (TryGetWorldLineAt(local, out var worldLineId))
+        {
+            NotesRuntime.SelectWorldLine(worldLineId);
+        }
+        else
+        {
+            NotesRuntime.ClearSelection();
         }
     }
 
@@ -581,12 +700,50 @@ public partial class BoardCanvas : Control
 
     // ---- node drag (free move / slot placement / re-slot / detach) ------------
 
-    public void OnNodeMoved() => _surface.QueueRedraw();
+    public void OnNodeMoved()
+    {
+        if (_dragGroup != null && _board != null
+            && _board.FindNode(_dragGroupAnchor) is { } anchor)
+        {
+            var delta = new Vector2(anchor.X, anchor.Y) - _dragGroupAnchorStart;
+            foreach (var (id, start) in _dragGroup)
+            {
+                if (id == _dragGroupAnchor)
+                {
+                    continue;
+                }
+                if (_board.FindNode(id) is { } node)
+                {
+                    node.X = start.X + delta.X;
+                    node.Y = start.Y + delta.Y;
+                }
+            }
+            _surface.Refresh();
+        }
+        _surface.QueueRedraw();
+    }
 
-    /// <summary>Any node drag shows the free slot markers.</summary>
+    /// <summary>Any node drag shows the free slot markers. Dragging a node that
+    /// is part of a multi-selection moves the whole (free-node) group.</summary>
     public void BeginNodeDrag(string nodeId)
     {
         _dragNode = nodeId;
+        _dragGroup = null;
+        var node = _board?.FindNode(nodeId);
+        if (node != null && node.RegionId.Length == 0
+            && _multiSelect.Count > 1 && _multiSelect.Contains(nodeId))
+        {
+            _dragGroup = new Dictionary<string, Vector2>(StringComparer.Ordinal);
+            foreach (var id in _multiSelect)
+            {
+                if (_board!.FindNode(id) is { RegionId: "" } member)
+                {
+                    _dragGroup[id] = new Vector2(member.X, member.Y);
+                }
+            }
+            _dragGroupAnchor = nodeId;
+            _dragGroupAnchorStart = new Vector2(node.X, node.Y);
+        }
         _surface.QueueRedraw();
     }
 
@@ -608,6 +765,35 @@ public partial class BoardCanvas : Control
         {
             return;
         }
+        if (_dragGroup != null)
+        {
+            var group = _dragGroup;
+            _dragGroup = null;
+            if (moved && !TrashRect.HasPoint(GetLocalMousePosition()))
+            {
+                var groupCommands = new List<INotesCommand>();
+                foreach (var (id, start) in group)
+                {
+                    if (_board.FindNode(id) is not { } member)
+                    {
+                        continue;
+                    }
+                    if (Math.Abs(member.X - start.X) < 0.01f && Math.Abs(member.Y - start.Y) < 0.01f)
+                    {
+                        continue;
+                    }
+                    groupCommands.Add(new MoveNodeCommand(
+                        NotesRuntime.ActiveDocument, _board.Id, id,
+                        start.X, start.Y, member.X, member.Y));
+                }
+                if (groupCommands.Count > 0)
+                {
+                    NotesRuntime.Commands.PushApplied(new CompositeCommand(groupCommands, "MoveSelection"));
+                }
+            }
+            NotesRuntime.Raise();
+            return;
+        }
         var node = _board.FindNode(nodeId);
         if (node == null)
         {
@@ -615,6 +801,7 @@ public partial class BoardCanvas : Control
         }
         if (!moved)
         {
+            ClearMultiSelection();
             NotesRuntime.SelectNode(nodeId);
             return;
         }

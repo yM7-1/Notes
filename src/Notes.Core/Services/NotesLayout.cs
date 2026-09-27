@@ -246,6 +246,34 @@ public static class NotesLayout
         }
         return slots;
     }
+
+    /// <summary>Tidy grid for free (non-structured) nodes. On a structured board
+    /// the grid starts to the right of the region columns so it never overlaps
+    /// them. Returns how many nodes were re-arranged.</summary>
+    public static int ArrangeFreeNodes(NotesBoard board)
+    {
+        var free = board.Nodes
+            .Where(n => n.RegionId.Length == 0)
+            .OrderBy(n => n.OrderMs)
+            .ThenBy(n => n.Title, StringComparer.Ordinal)
+            .ToList();
+        if (free.Count == 0)
+        {
+            return 0;
+        }
+        var startX = ColumnStartX;
+        if (board.TurnRegions.Count > 0)
+        {
+            startX = board.TurnRegions.Max(r => r.X + r.Width) + ColumnGap;
+        }
+        const int perColumn = 4;
+        for (var i = 0; i < free.Count; i++)
+        {
+            free[i].X = startX + i / perColumn * (NodeWidth + 40f);
+            free[i].Y = RowStartY + i % perColumn * (NodeHeight + 26f);
+        }
+        return free.Count;
+    }
 }
 
 public readonly record struct NotesSlot(string ParentId, float X, float Y);

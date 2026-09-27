@@ -26,6 +26,7 @@ public partial class NotesLayer : CanvasLayer
     private bool _handleStateApplied;
     private bool _collapsed;
     private int _side; // 0 = right edge, 1 = left edge
+    private int _builtQuickMask = -1;
 
     public override void _Ready()
     {
@@ -73,31 +74,7 @@ public partial class NotesLayer : CanvasLayer
         _quickRow = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         _quickRow.AddThemeConstantOverride("separation", 4);
         _box.AddChild(_quickRow);
-        var recordTurn = new Button
-        {
-            Text = ModLocalization.T("quick_record_turn", "Record turn"),
-            TooltipText = ModLocalization.T("quick_record_turn_tip", "Record this turn into the current world line"),
-        };
-        UiStyle.StyleButton(recordTurn, accent: true, fontSize: 11);
-        recordTurn.Pressed += () =>
-        {
-            NotesRuntime.Import(currentTurnOnly: true);
-            ShowToast(NotesRuntime.LastImportMessage);
-        };
-        _quickRow.AddChild(recordTurn);
-        var recordCombat = new Button
-        {
-            Text = ModLocalization.T("quick_copy_line", "Copy → new line"),
-            TooltipText = ModLocalization.T("quick_copy_line_tip",
-                "把当前世界线复制成可交互的世界线画板（录入/更改/预测）"),
-        };
-        UiStyle.StyleButton(recordCombat, fontSize: 11);
-        recordCombat.Pressed += () =>
-        {
-            NotesRuntime.CopyCurrentToNewLine();
-            ShowToast(NotesRuntime.LastImportMessage);
-        };
-        _quickRow.AddChild(recordCombat);
+        RebuildQuickRow();
 
         // Transient result message: the window may be closed, so the quick
         // buttons must not look like they did nothing.
@@ -139,6 +116,10 @@ public partial class NotesLayer : CanvasLayer
     public override void _Process(double delta)
     {
         NotesRuntime.Tick(delta);
+        if (_builtQuickMask != NotesRuntime.QuickActionsMask)
+        {
+            RebuildQuickRow();
+        }
         if (_toast.Visible)
         {
             _toastTimer -= delta;
@@ -184,6 +165,67 @@ public partial class NotesLayer : CanvasLayer
         _toast.Text = message;
         _toast.Visible = true;
         _toastTimer = 3.5;
+    }
+
+    /// <summary>Builds the quick buttons from the settings mask (record turn /
+    /// copy line / open settings).</summary>
+    private void RebuildQuickRow()
+    {
+        _builtQuickMask = NotesRuntime.QuickActionsMask;
+        foreach (var child in _quickRow.GetChildren())
+        {
+            _quickRow.RemoveChild(child);
+            child.QueueFree();
+        }
+        if ((_builtQuickMask & 1) != 0)
+        {
+            var recordTurn = new Button
+            {
+                Text = ModLocalization.T("quick_record_turn", "Record turn"),
+                TooltipText = ModLocalization.T("quick_record_turn_tip", "Record this turn into the current world line"),
+            };
+            UiStyle.StyleButton(recordTurn, accent: true, fontSize: 11);
+            recordTurn.Pressed += () =>
+            {
+                NotesRuntime.Import(currentTurnOnly: true);
+                ShowToast(NotesRuntime.LastImportMessage);
+            };
+            _quickRow.AddChild(recordTurn);
+        }
+        if ((_builtQuickMask & 2) != 0)
+        {
+            var recordCombat = new Button
+            {
+                Text = ModLocalization.T("quick_copy_line", "Copy → new line"),
+                TooltipText = ModLocalization.T("quick_copy_line_tip",
+                    "把当前世界线复制成可交互的世界线画板（录入/更改/预测）"),
+            };
+            UiStyle.StyleButton(recordCombat, fontSize: 11);
+            recordCombat.Pressed += () =>
+            {
+                NotesRuntime.CopyCurrentToNewLine();
+                ShowToast(NotesRuntime.LastImportMessage);
+            };
+            _quickRow.AddChild(recordCombat);
+        }
+        if ((_builtQuickMask & 4) != 0)
+        {
+            var settings = new Button
+            {
+                Text = ModLocalization.T("settings_button", "设置"),
+                TooltipText = ModLocalization.T("settings_tip", "自动记录 / 提示时长 / 撤销步数 / 默认库 / 图鉴上限"),
+            };
+            UiStyle.StyleButton(settings, fontSize: 11);
+            settings.Pressed += () =>
+            {
+                if (!_window.Visible)
+                {
+                    Toggle();
+                }
+                _window.OpenSettings();
+            };
+            _quickRow.AddChild(settings);
+        }
     }
 
     private void OnHandleActivated()

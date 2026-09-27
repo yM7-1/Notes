@@ -71,6 +71,9 @@ internal static class NotesOpLog
 
     public static bool Initialized => _initialized;
 
+    /// <summary>True when the player turned automatic capture off (settings).</summary>
+    private static bool CaptureOff => !NotesRuntime.AutoRecord;
+
     public static void Initialize()
     {
         if (_initialized)
@@ -205,7 +208,10 @@ internal static class NotesOpLog
             _causeId = null;
             _endTurnHand = null;
             EndBatches();
-            NotesRuntime.EnsureActualTurnRegion(_turn);
+            if (!CaptureOff)
+            {
+                NotesRuntime.EnsureActualTurnRegion(_turn);
+            }
         }
         catch (Exception ex)
         {
@@ -218,7 +224,7 @@ internal static class NotesOpLog
         try
         {
             EnsureCombat(state);
-            if (state.CurrentSide != CombatSide.Player)
+            if (CaptureOff || state.CurrentSide != CombatSide.Player)
             {
                 return;
             }
@@ -251,7 +257,7 @@ internal static class NotesOpLog
     {
         try
         {
-            if (!ReferenceEquals(player, GameContext.LocalPlayer))
+            if (CaptureOff || !ReferenceEquals(player, GameContext.LocalPlayer))
             {
                 return;
             }
@@ -272,7 +278,7 @@ internal static class NotesOpLog
     {
         try
         {
-            if (play.PlayCount > 1 && play.PlayIndex > 0)
+            if (CaptureOff || (play.PlayCount > 1 && play.PlayIndex > 0))
             {
                 return;
             }
@@ -305,7 +311,7 @@ internal static class NotesOpLog
     {
         try
         {
-            if (card == null || !ReferenceEquals(card.Owner, GameContext.LocalPlayer))
+            if (CaptureOff || card == null || !ReferenceEquals(card.Owner, GameContext.LocalPlayer))
             {
                 return;
             }
@@ -337,7 +343,7 @@ internal static class NotesOpLog
     {
         try
         {
-            if (!ReferenceEquals(potion.Owner, GameContext.LocalPlayer))
+            if (CaptureOff || !ReferenceEquals(potion.Owner, GameContext.LocalPlayer))
             {
                 return;
             }
@@ -357,7 +363,7 @@ internal static class NotesOpLog
     {
         try
         {
-            if (!ReferenceEquals(relic.Owner, GameContext.LocalPlayer))
+            if (CaptureOff || !ReferenceEquals(relic.Owner, GameContext.LocalPlayer))
             {
                 return;
             }
@@ -390,7 +396,7 @@ internal static class NotesOpLog
         try
         {
             var player = GameContext.LocalPlayer;
-            if (player == null || receiver == null)
+            if (CaptureOff || player == null || receiver == null)
             {
                 return;
             }
@@ -470,6 +476,10 @@ internal static class NotesOpLog
     /// pile add becomes an "enemy inserted" boundary annotation.</summary>
     public static void OnCardGenerated(CardModel card, Player? creator)
     {
+        if (CaptureOff)
+        {
+            return;
+        }
         try
         {
             if (card == null || creator != null)
@@ -496,6 +506,10 @@ internal static class NotesOpLog
     /// every other capture hook: an exception here would abort the enemy move.</summary>
     public static void OnMonsterMoveStart(MonsterModel monster)
     {
+        if (CaptureOff)
+        {
+            return;
+        }
         try
         {
             lock (Gate)
@@ -513,6 +527,10 @@ internal static class NotesOpLog
     /// the attribution window and freezes the monster's display name.</summary>
     public static void OnMonsterMoveEnd(MonsterModel monster)
     {
+        if (CaptureOff)
+        {
+            return;
+        }
         try
         {
             lock (Gate)

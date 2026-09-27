@@ -131,20 +131,7 @@ public partial class BoardCanvas
 
     private void SetNodeState(string nodeId, NodeState state)
     {
-        if (_board == null)
-        {
-            return;
-        }
-        var before = _board.FindNode(nodeId)?.Clone();
-        if (before == null)
-        {
-            return;
-        }
-        var after = before.Clone();
-        after.State = state;
-        NotesRuntime.Commands.Execute(new UpdateNodeCommand(
-            NotesRuntime.ActiveDocument, _board.Id, nodeId, before, after));
-        NotesRuntime.Raise();
+        NotesRuntime.SetNodeState(nodeId, state);
     }
 
     private void ToggleUpgrade(string nodeId)
@@ -288,7 +275,8 @@ public partial class BoardCanvas
         switch ((int)id)
         {
             case CanvasAddText:
-                AddTextNode(ViewCenterInBoardCoords() - new Vector2(NodeControl.NodeWidth / 2f, NodeControl.NodeHeight / 2f));
+                AddTextNode(SuggestFreePosition(ViewCenterInBoardCoords()
+                    - new Vector2(NodeControl.NodeWidth / 2f, NodeControl.NodeHeight / 2f)));
                 break;
             case CanvasNewWorldLine:
                 NotesRuntime.NewWorldLine();
