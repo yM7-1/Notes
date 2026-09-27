@@ -31,9 +31,9 @@ internal static class CardCatalog
             {
                 return _all;
             }
-            var list = new List<CardModel>();
             try
             {
+                var list = new List<CardModel>();
                 foreach (var card in ModelDb.AllCards)
                 {
                     if (card != null)
@@ -41,14 +41,21 @@ internal static class CardCatalog
                         list.Add(card);
                     }
                 }
+                list.Sort((a, b) => string.Compare(TitleOf(a), TitleOf(b), StringComparison.CurrentCultureIgnoreCase));
+                // Only a complete build is cached: a failure (or an empty
+                // database, e.g. called before the game content is ready) must
+                // not pin the catalog to an empty list for the whole run.
+                if (list.Count > 0)
+                {
+                    _all = list;
+                }
+                return list;
             }
             catch (Exception ex)
             {
-                MegaCrit.Sts2.Core.Logging.Log.Error("[Notes] card catalog build failed: " + ex);
+                MegaCrit.Sts2.Core.Logging.Log.Error("[Notes] card catalog build failed (will retry): " + ex);
+                return Array.Empty<CardModel>();
             }
-            list.Sort((a, b) => string.Compare(TitleOf(a), TitleOf(b), StringComparison.CurrentCultureIgnoreCase));
-            _all = list;
-            return _all;
         }
     }
 

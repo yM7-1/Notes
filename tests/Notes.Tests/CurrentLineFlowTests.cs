@@ -84,4 +84,24 @@ public class CurrentLineFlowTests
         Assert.DoesNotContain(plan.Edges, e => e.From == "manual");
         Assert.Single(plan.Edges);
     }
+
+    [Fact]
+    public void BuildWorldLineCopy_IsDetached_AndRemapsIds()
+    {
+        var document = NewRunDocument();
+        var current = document.EnsureCurrentBoard("Current");
+        var line = document.EnsureActualWorldLine(current.Id, current.Name);
+        var region = document.EnsureTurnRegion(current.Id, line.Id, 1);
+        document.AddNode(current.Id, new NotesNode { Id = "n1", RegionId = region.Id, Title = "t" });
+        var boardsBefore = document.Boards.Count;
+
+        var copy = document.BuildWorldLineCopy(current.Id, "World line 1")!;
+
+        Assert.Equal(boardsBefore, document.Boards.Count); // detached until attached
+        Assert.Null(document.FindBoard(copy.Id));
+        Assert.NotEqual(line.Id, copy.WorldLines.Single().Id);
+        var copyRegion = copy.TurnRegions.Single();
+        Assert.NotEqual(region.Id, copyRegion.Id);
+        Assert.Single(copy.NodesOfRegion(copyRegion.Id));
+    }
 }

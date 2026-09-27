@@ -115,6 +115,31 @@ public class CommandStackTests
     }
 
     [Fact]
+    public void AddBoard_WorldLineCreation_UndoRedoKeepsBoardAndActivation()
+    {
+        var document = new NotesDocument();
+        var overview = document.EnsureActiveBoard("Overview");
+        var stack = new CommandStack();
+
+        var board = document.BuildWorldLineBoard("World line 1");
+        var line = board.WorldLines.Single();
+        board.TurnRegions.Add(new NotesTurnRegion { Id = "r1", WorldLineId = line.Id, TurnNumber = 1 });
+
+        stack.Execute(new AddBoardCommand(document, board));
+        Assert.Equal(2, document.Boards.Count);
+        Assert.Equal(board.Id, document.ActiveBoardId);
+
+        stack.Undo();
+        Assert.Single(document.Boards);
+        Assert.Equal(overview.Id, document.ActiveBoardId);
+
+        stack.Redo();
+        Assert.Equal(2, document.Boards.Count);
+        Assert.Same(board, document.FindBoard(board.Id));
+        Assert.Single(document.FindBoard(board.Id)!.TurnRegions);
+    }
+
+    [Fact]
     public void Stack_TrimsAtLimit_AndClearsRedoOnNewCommand()
     {
         var (doc, board, stack) = NewBoard();

@@ -368,11 +368,11 @@ internal static class NotesOpLog
             }
             var title = RelicTitle(relic);
             var text = Format("annot_relic_trigger", "「{0}」触发", title);
-            if (TryAnnotateCause(text, "relic:" + refId))
+            if (TryAnnotateCause(text, AnnotationProtocol.RelicRef(refId)))
             {
                 return;
             }
-            NotesRuntime.AddTurnEvent(_turn, new NotesAnnotation { Text = text, RefId = "relic:" + refId });
+            NotesRuntime.AddTurnEvent(_turn, new NotesAnnotation { Text = text, RefId = AnnotationProtocol.RelicRef(refId) });
         }
         catch (Exception ex)
         {
@@ -416,7 +416,7 @@ internal static class NotesOpLog
             lock (Gate)
             {
                 var targetName = EnsureEnemyName(receiver);
-                var refId = "damage:" + targetName;
+                var refId = AnnotationProtocol.DamageRef(targetName);
                 var existing = op.Annotations.FirstOrDefault(a => a.RefId == refId);
                 if (existing == null)
                 {
@@ -424,15 +424,16 @@ internal static class NotesOpLog
                     {
                         RefId = refId,
                         Text = targetName,
-                        Meta = op.Title + "\u001f" + (killed ? "1" : "0"),
+                        Meta = AnnotationProtocol.Join(op.Title, killed ? "1" : "0"),
                         Count = result.TotalDamage,
                     });
                 }
                 else
                 {
                     existing.Count += result.TotalDamage;
-                    var wasKilled = existing.Meta.EndsWith("\u001f1", StringComparison.Ordinal);
-                    existing.Meta = op.Title + "\u001f" + (killed || wasKilled ? "1" : "0");
+                    var wasKilled = existing.Meta.EndsWith(
+                        AnnotationProtocol.Separator + "1", StringComparison.Ordinal);
+                    existing.Meta = AnnotationProtocol.Join(op.Title, killed || wasKilled ? "1" : "0");
                 }
             }
             NotesRuntime.OnOpsChanged();
@@ -459,7 +460,7 @@ internal static class NotesOpLog
         }
         NotesRuntime.MergeTurnEvent(_turn, new NotesAnnotation
         {
-            RefId = "loss:",
+            RefId = AnnotationProtocol.Loss,
             Count = amount,
         });
     }
@@ -532,7 +533,7 @@ internal static class NotesOpLog
     private static void HandleDraw(CardModel card)
     {
         var name = CardCatalog.TitleOf(card);
-        if (TryAnnotateCause(Format("annot_draw_to", "抽到 {0}", name), "card:" + card.Id))
+        if (TryAnnotateCause(Format("annot_draw_to", "抽到 {0}", name), AnnotationProtocol.Card + card.Id))
         {
             return;
         }
@@ -566,7 +567,7 @@ internal static class NotesOpLog
         }
         NotesRuntime.MergeTurnEvent(_turn, new NotesAnnotation
         {
-            RefId = "discard:",
+            RefId = AnnotationProtocol.Discard,
             Text = name,
             Count = 1,
         });
@@ -584,7 +585,7 @@ internal static class NotesOpLog
         }
         NotesRuntime.MergeTurnEvent(_turn, new NotesAnnotation
         {
-            RefId = "exhaust:",
+            RefId = AnnotationProtocol.Exhaust,
             Text = name,
             Count = 1,
         });
@@ -621,9 +622,9 @@ internal static class NotesOpLog
         }
         NotesRuntime.MergeTurnEvent(_turn, new NotesAnnotation
         {
-            RefId = "insert:" + enemy + "\u001f" + pileKey + "\u001f" + card.Id,
+            RefId = AnnotationProtocol.InsertRef(enemy, pileKey, card.Id.ToString()),
             Text = CardCatalog.TitleOf(card),
-            Meta = enemy + "\u001f" + pileKey,
+            Meta = AnnotationProtocol.Join(enemy, pileKey),
             Count = 1,
         });
         return true;
@@ -798,10 +799,10 @@ internal static class NotesOpLog
             {
                 return false;
             }
-            var existing = cause.Annotations.FirstOrDefault(a => a.RefId == "exhaust:");
+            var existing = cause.Annotations.FirstOrDefault(a => a.RefId == AnnotationProtocol.Exhaust);
             if (existing == null)
             {
-                cause.Annotations.Add(new NotesAnnotation { RefId = "exhaust:", Text = name, Meta = cause.Title });
+                cause.Annotations.Add(new NotesAnnotation { RefId = AnnotationProtocol.Exhaust, Text = name, Meta = cause.Title });
             }
             else
             {
@@ -834,10 +835,10 @@ internal static class NotesOpLog
             {
                 return false;
             }
-            var existing = cause.Annotations.FirstOrDefault(a => a.RefId == "discard:");
+            var existing = cause.Annotations.FirstOrDefault(a => a.RefId == AnnotationProtocol.Discard);
             if (existing == null)
             {
-                cause.Annotations.Add(new NotesAnnotation { RefId = "discard:", Text = name, Meta = cause.Title });
+                cause.Annotations.Add(new NotesAnnotation { RefId = AnnotationProtocol.Discard, Text = name, Meta = cause.Title });
             }
             else
             {

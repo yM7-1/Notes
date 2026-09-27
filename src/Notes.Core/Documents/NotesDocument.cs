@@ -88,18 +88,19 @@ public sealed class NotesDocument
     }
 
     /// <summary>Deep-copies a board (regions, nodes, edges, annotations) into a
-    /// new interactive world-line board with fresh ids; positions and captured
-    /// snapshots are preserved. The copy becomes the active board.</summary>
-    public NotesBoard? DuplicateWorldLineBoard(string sourceBoardId, string newName)
+    /// detached new interactive world-line board with fresh ids; positions and
+    /// captured snapshots are preserved. The caller attaches it (e.g. through
+    /// an undo-able <see cref="Services.AddBoardCommand"/>).</summary>
+    public NotesBoard? BuildWorldLineCopy(string sourceBoardId, string newName)
     {
         var source = FindBoard(sourceBoardId);
         if (source == null)
         {
             return null;
         }
-        var target = CreateWorldLineBoard(newName);
+        var target = BuildWorldLineBoard(newName);
         var sourceLine = source.WorldLines.FirstOrDefault();
-        var targetLine = EnsureActualWorldLine(target.Id, newName);
+        var targetLine = target.WorldLines[0];
 
         var regionMap = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var region in source.TurnRegions.OrderBy(r => r.TurnNumber))
@@ -155,6 +156,20 @@ public sealed class NotesDocument
         return target;
     }
 
+    /// <summary>Deep-copies a board into a new interactive world-line board with
+    /// fresh ids; the copy is attached and becomes active.</summary>
+    public NotesBoard? DuplicateWorldLineBoard(string sourceBoardId, string newName)
+    {
+        var target = BuildWorldLineCopy(sourceBoardId, newName);
+        if (target == null)
+        {
+            return null;
+        }
+        Boards.Add(target);
+        ActiveBoardId = target.Id;
+        return target;
+    }
+
     public int NextWorldLineOrdinal()
     {
         var max = 0;
@@ -169,6 +184,28 @@ public sealed class NotesDocument
     public NotesBoard CreateWorldLineBoard(string name)
     {
         return CreateBoard(name, BoardKind.WorldLine, NextWorldLineOrdinal());
+    }
+
+    /// <summary>Builds a detached world-line board with its actual world line
+    /// (caller attaches it via a command so the creation stays undo-able).</summary>
+    public NotesBoard BuildWorldLineBoard(string name)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(name) ? "World line" : name.Trim();
+        var board = new NotesBoard
+        {
+            Id = IdFactory.NewBoardId(),
+            Name = trimmed,
+            Kind = BoardKind.WorldLine,
+            Ordinal = NextWorldLineOrdinal(),
+            CreatedAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        };
+        board.WorldLines.Add(new NotesWorldLine
+        {
+            Id = IdFactory.NewWorldLineId(),
+            Name = trimmed,
+            CreatedAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        });
+        return board;
     }
 
     /// <summary>The board that holds the actual world line (lowest ordinal).</summary>

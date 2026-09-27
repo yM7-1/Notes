@@ -24,6 +24,7 @@ public partial class NotesWindow : Control
     private CardPalette _palette = null!;
     private InspectorPanel _inspector = null!;
     private ConfirmationDialog _deleteConfirm = null!;
+    private string _pendingDeleteBoardId = "";
     private PanelContainer _onboarding = null!;
     private Panel _grip = null!;
     private bool _updating;
@@ -254,8 +255,14 @@ public partial class NotesWindow : Control
         UiStyle.StyleDialog(_deleteConfirm);
         _deleteConfirm.Confirmed += () =>
         {
-            var board = NotesRuntime.ActiveBoard;
-            NotesRuntime.DeleteBoard(board.Id);
+            // Delete the board captured when the dialog opened: the active
+            // board may have changed while the confirmation was up.
+            var boardId = _pendingDeleteBoardId;
+            _pendingDeleteBoardId = "";
+            if (boardId.Length > 0)
+            {
+                NotesRuntime.DeleteBoard(boardId);
+            }
         };
         AddChild(_deleteConfirm);
 
@@ -678,7 +685,14 @@ public partial class NotesWindow : Control
 
     private void ShowDeleteBoard()
     {
-        _deleteConfirm.DialogText = ModLocalization.T("delete_board_text", "Delete the current board?");
+        var board = NotesRuntime.ActiveBoard;
+        if (board == null)
+        {
+            return;
+        }
+        _pendingDeleteBoardId = board.Id;
+        _deleteConfirm.DialogText = ModLocalization.T("delete_board_text", "Delete the current board?")
+            + "\n" + board.Name;
         _deleteConfirm.PopupCentered(new Vector2I(380, 140));
     }
 

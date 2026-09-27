@@ -73,8 +73,20 @@ internal static class NotesRuntime
         HoverChanged?.Invoke();
     }
 
-    /// <summary>Short feedback for the last import action (shown in the status bar).</summary>
+    /// <summary>Short feedback for the last import action (shown in the status
+    /// bar). Expires by itself so a stale result does not linger forever.</summary>
     public static string LastImportMessage { get; private set; } = "";
+
+    private const double ImportMessageLifetime = 8.0;
+
+    private static double _importMessageAge;
+
+    /// <summary>Shows a status-bar message and restarts its expiry timer.</summary>
+    public static void SetImportMessage(string message)
+    {
+        LastImportMessage = message;
+        _importMessageAge = 0;
+    }
 
     public static void SelectNode(string nodeId) => SetSelection(NotesSelectionKind.Node, nodeId);
 
@@ -141,7 +153,7 @@ internal static class NotesRuntime
             RunDocument = NotesPersistence.LoadRun(run, out var ops, out _combatKey, out var loadWarning);
             if (loadWarning.Length > 0)
             {
-                LastImportMessage = loadWarning;
+                SetImportMessage(loadWarning);
             }
             RunDocument.EnsureOverviewBoard(OverviewBoardName());
             RunDocument.EnsureCurrentBoard(CurrentBoardName());
@@ -423,6 +435,7 @@ internal static class NotesRuntime
 
     public static void Tick(double delta)
     {
+        ExpireImportMessage(delta);
         FlushOpsIfDirty();
         if (!NotesOpLog.Initialized)
         {
@@ -465,6 +478,24 @@ internal static class NotesRuntime
         }
         _saveTimer = 0;
         FlushSave();
+    }
+
+    /// <summary>Drops the status-bar feedback once it has been visible long
+    /// enough; the UI refreshes through <see cref="Changed"/>.</summary>
+    private static void ExpireImportMessage(double delta)
+    {
+        if (LastImportMessage.Length == 0)
+        {
+            return;
+        }
+        _importMessageAge += delta;
+        if (_importMessageAge < ImportMessageLifetime)
+        {
+            return;
+        }
+        _importMessageAge = 0;
+        LastImportMessage = "";
+        Changed?.Invoke();
     }
 
     public static void FlushSave()
@@ -603,7 +634,7 @@ internal static class NotesRuntime
         {
             region.TurnEvents.Add(annotation.Clone());
         }
-        else if (annotation.RefId is "exhaust:" or "discard:")
+        else if (AnnotationProtocol.IsExhaust(annotation.RefId) || AnnotationProtocol.IsDiscard(annotation.RefId))
         {
             if (!existing.Text.Contains(annotation.Text, StringComparison.Ordinal))
             {
@@ -718,19 +749,32 @@ internal static class NotesRuntime
         }
     }
 
+    /// <summary>Creates a new interactive world line. Runs through the command
+    /// stack, so Ctrl+Z removes it again.</summary>
     public static void NewWorldLine()
     {
         var document = ActiveDocument;
         var ordinal = document.NextWorldLineOrdinal();
-        var board = document.CreateWorldLineBoard(WorldLineBoardName(ordinal));
-        var line = document.EnsureActualWorldLine(board.Id, board.Name);
+        var board = document.BuildWorldLineBoard(WorldLineBoardName(ordinal));
+        var line = board.WorldLines[0];
         // A brand-new line starts empty at turn 1; keep the current turn visible too.
-        document.EnsureTurnRegion(board.Id, line.Id, 1);
+        board.TurnRegions.Add(new NotesTurnRegion
+        {
+            Id = IdFactory.NewRegionId(),
+            WorldLineId = line.Id,
+            TurnNumber = 1,
+        });
         var turn = CurrentTurn;
         if (turn > 1)
         {
-            document.EnsureTurnRegion(board.Id, line.Id, turn);
+            board.TurnRegions.Add(new NotesTurnRegion
+            {
+                Id = IdFactory.NewRegionId(),
+                WorldLineId = line.Id,
+                TurnNumber = turn,
+            });
         }
+        Commands.Execute(new AddBoardCommand(document, board));
         Raise();
     }
 
@@ -743,7 +787,7 @@ internal static class NotesRuntime
     {
         if (!RunActive)
         {
-            LastImportMessage = ModLocalization.T("import_empty", "没有可录入的操作");
+            SetImportMessage(ModLocalization.T("import_empty", "没有可录入的操作"));
             Raise();
             return;
         }
@@ -754,7 +798,7 @@ internal static class NotesRuntime
         var ops = CollectOps();
         if (ops.Count == 0)
         {
-            LastImportMessage = ModLocalization.T("import_empty", "没有可录入的操作");
+            SetImportMessage(ModLocalization.T("import_empty", "没有可录入的操作"));
             Raise();
             return;
         }
@@ -763,12 +807,12 @@ internal static class NotesRuntime
         {
             CopyCurrentToNewLine();
             board = ActiveBoard;
-            LastImportMessage = "";
+            SetImportMessage("");
         }
         if (board == null || board.Kind != BoardKind.WorldLine)
         {
-            LastImportMessage = ModLocalization.T("import_readonly",
-                "请先「复制→新世界线」或「+ 世界线」创建可交互画板再录入");
+            SetImportMessage(ModLocalization.T("import_readonly",
+                "请先「复制→新世界线」或「+ 世界线」创建可交互画板再录入"));
             Raise();
             return;
         }
@@ -807,21 +851,22 @@ internal static class NotesRuntime
         {
             Commands.Execute(new CompositeCommand(commands, "Import"));
         }
-        LastImportMessage = commands.Count > 0
+        SetImportMessage(commands.Count > 0
             ? ModLocalization.T("import_done", "已录入") + " " + commands.Count + " → " + board.Name
-            : ModLocalization.T("import_empty", "没有可录入的操作");
+            : ModLocalization.T("import_empty", "没有可录入的操作"));
         MegaCrit.Sts2.Core.Logging.Log.Info(
             $"[Notes] import: board={board.Name} turns={string.Join(",", turns)} ops={ops.Count} commands={commands.Count}");
         Raise();
     }
 
     /// <summary>Copies the read-only current world line into a new interactive
-    /// world-line board so the player can record, edit and speculate.</summary>
+    /// world-line board so the player can record, edit and speculate. Runs
+    /// through the command stack, so Ctrl+Z removes the copy again.</summary>
     public static void CopyCurrentToNewLine()
     {
         if (!RunActive)
         {
-            LastImportMessage = ModLocalization.T("copy_no_run", "没有进行中的游戏，暂时无法复制世界线");
+            SetImportMessage(ModLocalization.T("copy_no_run", "没有进行中的游戏，暂时无法复制世界线"));
             Raise();
             return;
         }
@@ -829,7 +874,7 @@ internal static class NotesRuntime
         RefreshCurrentBoard();
         var current = document.EnsureCurrentBoard(CurrentBoardName());
         var ordinal = document.NextWorldLineOrdinal();
-        var copy = document.DuplicateWorldLineBoard(current.Id, WorldLineBoardName(ordinal));
+        var copy = document.BuildWorldLineCopy(current.Id, WorldLineBoardName(ordinal));
         if (copy == null)
         {
             return;
@@ -838,8 +883,8 @@ internal static class NotesRuntime
         {
             SetLibrary(NotesLibrary.Run);
         }
-        SetActiveBoard(copy.Id);
-        LastImportMessage = ModLocalization.T("copy_done", "已复制到") + " " + copy.Name;
+        Commands.Execute(new AddBoardCommand(document, copy));
+        SetImportMessage(ModLocalization.T("copy_done", "已复制到") + " " + copy.Name);
         MegaCrit.Sts2.Core.Logging.Log.Info($"[Notes] copy current line -> {copy.Name}");
         Raise();
     }

@@ -251,7 +251,7 @@ internal static class UiStyle
     public static string AnnotationText(NotesAnnotation annotation)
     {
         var refId = annotation.RefId;
-        if (refId.StartsWith("exhaust:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsExhaust(refId))
         {
             var names = annotation.Text.Split('、', StringSplitOptions.RemoveEmptyEntries).ToList();
             // Put the played card (the op that caused the exhausts) first.
@@ -269,7 +269,7 @@ internal static class UiStyle
                 : string.Join(", ", names);
             return ModLocalization.T("annot_exhaust_fmt", "「{0}」被消耗").Replace("{0}", joined);
         }
-        if (refId.StartsWith("discard:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsDiscard(refId))
         {
             var names = annotation.Text.Split('、', StringSplitOptions.RemoveEmptyEntries).ToList();
             if (annotation.Meta.Length > 0)
@@ -286,18 +286,18 @@ internal static class UiStyle
                 : string.Join(", ", names);
             return ModLocalization.T("annot_discard_fmt", "「{0}」被弃置").Replace("{0}", joined);
         }
-        if (refId.StartsWith("damage:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsDamage(refId))
         {
-            var parts = annotation.Meta.Split('\u001f');
+            var parts = AnnotationProtocol.Split(annotation.Meta);
             var source = parts.Length > 0 ? parts[0] : "";
             var killed = parts.Length > 1 && parts[1] == "1";
             return killed
                 ? Format("annot_damage_kill", "「{0}」对 {1} 造成 {2} 点伤害并击杀", source, annotation.Text, annotation.Count)
                 : Format("annot_damage", "「{0}」对 {1} 造成 {2} 点伤害", source, annotation.Text, annotation.Count);
         }
-        if (refId.StartsWith("insert:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsInsert(refId))
         {
-            var parts = annotation.Meta.Split('\u001f');
+            var parts = AnnotationProtocol.Split(annotation.Meta);
             var enemy = parts.Length > 0 ? parts[0] : "";
             var pileKey = parts.Length > 1 ? parts[1] : "";
             var card = annotation.Count > 1
@@ -305,7 +305,7 @@ internal static class UiStyle
                 : annotation.Text;
             return Format("annot_insert", "【{0}】将【{1}】加入到【{2}】", enemy, card, PileLabel(pileKey));
         }
-        if (refId.StartsWith("loss:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsLoss(refId))
         {
             return Format("annot_loss", "战损 {0}", annotation.Count);
         }
@@ -319,31 +319,31 @@ internal static class UiStyle
     /// <summary>Accent color for an annotation chip / badge.</summary>
     public static Color AnnotationColor(string refId)
     {
-        if (refId.StartsWith("relic:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsRelic(refId))
         {
             return KindColor(NodeKind.Relic, -1);
         }
-        if (refId.StartsWith("exhaust:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsExhaust(refId))
         {
             return KindColor(NodeKind.Exhaust, -1);
         }
-        if (refId.StartsWith("discard:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsDiscard(refId))
         {
             return KindColor(NodeKind.Discard, -1);
         }
-        if (refId.StartsWith("insert:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsInsert(refId))
         {
             return Color.FromHtml("cf6f9a");
         }
-        if (refId.StartsWith("loss:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsLoss(refId))
         {
             return Color.FromHtml("e06c5f");
         }
-        if (refId.StartsWith("damage:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsDamage(refId))
         {
             return Color.FromHtml("e06c5f");
         }
-        if (refId.StartsWith("card:", StringComparison.Ordinal))
+        if (AnnotationProtocol.IsCard(refId))
         {
             return KindColor(NodeKind.Draw, -1);
         }

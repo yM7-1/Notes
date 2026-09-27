@@ -35,7 +35,9 @@ public static class NotesJson
         }
     }
 
-    /// <summary>Repairs ids, nulls, zoom range and dangling references in place.</summary>
+    /// <summary>Repairs ids, nulls, zoom range and dangling references in place.
+    /// Duplicate ids are made unique per scope: the first holder keeps its id so
+    /// existing references keep resolving to it, later holders get a fresh id.</summary>
     public static NotesDocument Normalize(NotesDocument? document)
     {
         if (document == null)
@@ -46,9 +48,18 @@ public static class NotesJson
         document.Version = Math.Max(document.Version, NotesDocument.CurrentVersion);
         document.Boards ??= new List<NotesBoard>();
 
+        // Board ids must be unique as well; previously duplicates were kept and
+        // the picker could never reach the later copy. Later duplicates are
+        // renamed while the first holder keeps its id, so every reference
+        // (including ActiveBoardId) still resolves to a board.
+        var seenBoards = new HashSet<string>(StringComparer.Ordinal);
         foreach (var board in document.Boards)
         {
             board.Id = string.IsNullOrWhiteSpace(board.Id) ? IdFactory.NewBoardId() : board.Id;
+            while (!seenBoards.Add(board.Id))
+            {
+                board.Id = IdFactory.NewBoardId();
+            }
             board.Name = board.Name?.Trim() ?? "";
             board.Nodes ??= new List<NotesNode>();
             board.Edges ??= new List<NotesEdge>();

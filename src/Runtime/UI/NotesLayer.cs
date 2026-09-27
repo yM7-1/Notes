@@ -234,6 +234,7 @@ public partial class NotesLayer : CanvasLayer
         _quickRow.Visible = false;
         _collapseButton.Visible = false;
         _toggle.SetText(_side == 1 ? "▶" : "◀");
+        _toggle.TooltipText = ModLocalization.T("handle_expand_tip", "展开笔记 (F8)");
         _toggle.CustomMinimumSize = new Vector2(ArrowWidth, ArrowHeight);
         _toggle.Size = new Vector2(ArrowWidth, ArrowHeight);
         ApplyCollapsedPosition();
@@ -249,6 +250,7 @@ public partial class NotesLayer : CanvasLayer
         _quickRow.Visible = true;
         _collapseButton.Visible = true;
         _toggle.SetText(ModLocalization.T("toggle_button", "Notes"));
+        _toggle.TooltipText = ModLocalization.T("window_title", "Notes") + " (F8)";
         _toggle.CustomMinimumSize = new Vector2(HandleWidth, HandleHeight);
         _toggle.Size = new Vector2(HandleWidth, HandleHeight);
         if (NotesRuntime.TryGetButtonPosition(out var savedX, out var savedY))

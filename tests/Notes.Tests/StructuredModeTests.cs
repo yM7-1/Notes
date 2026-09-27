@@ -69,7 +69,7 @@ public class StructuredModeTests
         Assert.Contains(remaining, n => n.Id == idOf["op1"]);
         Assert.Contains(remaining, n => n.Id == idOf["op3"]);
         Assert.DoesNotContain(board.Edges, e => e.To == idOf["op2"] || e.From == idOf["op2"]);
-        Assert.Equal(1, board.EdgesOfRegion(region.Id).Count()); // op1 -> op3
+        Assert.Single(board.EdgesOfRegion(region.Id)); // op1 -> op3
     }
 
     [Fact]

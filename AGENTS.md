@@ -24,17 +24,18 @@
 - **游戏当前跑的是工坊订阅版**；本地 `mods/Notes` 已删除（避免 DUPLICATE_ID），
   要实机验证必须更新工坊（先问用户）或临时本地部署并退订。
 
-### 未完成（backlog，`bash tools/check.sh` 之外的下一批候选）
-1. `NotesJson.Normalize` 重复 ID 只改自身、不重映射引用（损坏/合并存档会错位并回写）
-2. `LastImportMessage` 过期不清理（旧提示长期挂在状态栏）
-3. `tools/publish.sh` 硬编码 `v0.1.0` tag，重跑会推错标签
-4. BoardCanvas 拆分（1150 行 god object；交互/菜单/放置逻辑混在一起）
-5. 注释协议统一（`relic:/damage:/insert:` 分散在 NotesOpLog / UiStyle / Core 三层）
-6. 世界线创建（`+ World line` / `复制→新线`）不走命令栈 → 无法 Ctrl+Z
-7. `CardCatalog` 构建失败会缓存空列表 → 该局图鉴永久为空
-8. 删除画板确认框在确认时才取活动画板（极端情况可能删错板）
-9. 细节：折叠箭头 tooltip 仍是「世界线笔记 (F8)」；图鉴行整表重建（已去抖未复用）；
-   手柄导航未实测（Tab 键盘可用）
+### 未完成（backlog，2026-09-27 清理后）
+1. 图鉴行整表重建（已去抖未复用）：搜索时仍会重建 ≤120 行，未做行复用
+2. 手柄导航未实测（Tab 键盘可用）
+3. 实机验收 / 工坊更新：本地 `mods/Notes` 已删除，实机验证需更新工坊（先问用户）
+4. 长期方向：卡面缩略图 atlas、设置页 RitsuLib `[ModSettingsPage]`
+
+### 2026-09-27 遗留清理（版本仍 v0.8.0，未上传工坊）
+- 已完成原清单 1–9：Normalize 画板去重 + 幂等修复、提示 8s 过期、
+  `publish.sh` 版本标签、注释协议 `AnnotationProtocol`、世界线创建走命令栈（Ctrl+Z 可撤）、
+  `CardCatalog` 失败不缓存、删板确认框快照目标板、折叠箭头 tooltip、`BoardCanvas.Menus.cs` 拆分
+- 单测 45 → 52；`bash tools/check.sh` 全绿（双版本构建 0 warning）
+- 工坊 DLL 未重建（代码改动未发布）；发布时先问用户再走 `steam-workshop-upload` skill
 
 ### 关键注意事项（本轮踩过的坑）
 - 工坊上传：`/mnt/d/steamcmd/steamcmd.exe +login lwh4646 +workshop_build_item 'D:\0_git\Notes\packaging\workshop\Notes_workshop.vdf' +quit`；

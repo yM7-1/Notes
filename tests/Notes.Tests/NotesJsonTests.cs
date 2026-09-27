@@ -95,4 +95,80 @@ public class NotesJsonTests
 
         Assert.Equal(first, second);
     }
+
+    [Fact]
+    public void Normalize_DedupesBoardIds_AndKeepsEveryBoardReachable()
+    {
+        var document = new NotesDocument
+        {
+            ActiveBoardId = "dup",
+            Boards =
+            {
+                new NotesBoard { Id = "dup", Name = "first" },
+                new NotesBoard { Id = "dup", Name = "second" },
+            },
+        };
+
+        var normalized = NotesJson.Normalize(document);
+
+        Assert.Equal(2, normalized.Boards.Count);
+        Assert.NotEqual(normalized.Boards[0].Id, normalized.Boards[1].Id);
+        Assert.Equal("first", normalized.FindBoard(normalized.Boards[0].Id)!.Name);
+        Assert.Equal("second", normalized.FindBoard(normalized.Boards[1].Id)!.Name);
+        Assert.Equal(normalized.Boards[0].Id, normalized.ActiveBoardId);
+    }
+
+    [Fact]
+    public void Normalize_DuplicateEntityIds_KeepReferencesResolvable()
+    {
+        var document = new NotesDocument
+        {
+            Boards =
+            {
+                new NotesBoard
+                {
+                    Id = "b1",
+                    WorldLines =
+                    {
+                        new NotesWorldLine { Id = "w", Name = "A" },
+                        new NotesWorldLine { Id = "w", Name = "B" },
+                    },
+                    TurnRegions =
+                    {
+                        new NotesTurnRegion { Id = "r", WorldLineId = "w", TurnNumber = 1 },
+                        new NotesTurnRegion { Id = "r", WorldLineId = "w", TurnNumber = 2 },
+                    },
+                    Nodes =
+                    {
+                        new NotesNode { Id = "n", Title = "n1", RegionId = "r" },
+                        new NotesNode { Id = "n", Title = "n2", RegionId = "r" },
+                    },
+                    Edges =
+                    {
+                        new NotesEdge { Id = "e", From = "n", To = "n" },
+                    },
+                },
+            },
+        };
+
+        var normalized = NotesJson.Normalize(document);
+        var board = normalized.Boards[0];
+
+        // ids unique per scope, first holder keeps its id
+        Assert.Equal(2, board.WorldLines.Select(l => l.Id).Distinct().Count());
+        Assert.Equal(2, board.TurnRegions.Select(r => r.Id).Distinct().Count());
+        Assert.Equal(2, board.Nodes.Select(n => n.Id).Distinct().Count());
+        Assert.Equal("w", board.WorldLines[0].Id);
+        Assert.Equal("r", board.TurnRegions[0].Id);
+        Assert.Equal("n", board.Nodes[0].Id);
+
+        // references resolve (first-wins) and nothing dangles
+        Assert.All(board.TurnRegions, r => Assert.NotNull(board.FindWorldLine(r.WorldLineId)));
+        Assert.All(board.Nodes, n => Assert.NotNull(board.FindRegion(n.RegionId)));
+        Assert.Empty(board.Edges); // the duplicate self-loop is dropped
+
+        var once = NotesJson.Serialize(normalized);
+        var twice = NotesJson.Serialize(NotesJson.Deserialize(once));
+        Assert.Equal(once, twice);
+    }
 }
