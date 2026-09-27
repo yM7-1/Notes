@@ -176,7 +176,7 @@
   "empty_free_title": "自由画板",
   "empty_free_hint": "拖入卡牌或文字自由推演；记录战斗回合请先「+ 世界线」",
   "copy_no_run": "没有进行中的游戏，暂时无法复制世界线",
-  "palette_click_tip": "点击：视图中心放置 · Alt+点击：按推测放置",
+  "palette_click_tip": "点击：放置 · Alt+点击：推测 · Shift+点击：已尝试 · 右键：升级+",
   "notes_find": "查找",
   "notes_find_tip": "搜索当前库的笔记节点并跳转 (Ctrl+F)",
   "notes_search_placeholder": "搜索笔记：标题 / 备注 / 卡 id",
@@ -231,5 +231,7 @@
   "quick_act_settings": "打开设置",
   "compare_turns": "回合数",
   "settings_export_dir": "导出目录（Markdown + PNG）",
-  "settings_open_export": "打开目录"
+  "settings_open_export": "打开目录",
+  "settings_copy_md": "复制 Markdown",
+  "export_copied": "已复制 Markdown 到剪贴板"
 }

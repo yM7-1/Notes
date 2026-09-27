@@ -120,6 +120,10 @@ public partial class NotesWindow
         UiStyle.StyleButton(exportButton, fontSize: 11);
         exportButton.Pressed += OpenExportDirectory;
         exportRow.AddChild(exportButton);
+        var copyButton = new Button { Text = ModLocalization.T("settings_copy_md", "复制 Markdown") };
+        UiStyle.StyleButton(copyButton, fontSize: 11);
+        copyButton.Pressed += CopyMarkdownToClipboard;
+        exportRow.AddChild(copyButton);
         panel.AddChild(exportRow);
 
         var close = new Button { Text = ModLocalization.T("close", "Close") };

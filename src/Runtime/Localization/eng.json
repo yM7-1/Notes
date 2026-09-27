@@ -176,7 +176,7 @@
   "empty_free_title": "Free board",
   "empty_free_hint": "Drag cards or text to sketch; create a world line (+ World line) to record turns",
   "copy_no_run": "No run in progress; nothing to copy yet",
-  "palette_click_tip": "Click: add at view center · Alt+Click: add as speculated",
+  "palette_click_tip": "Click: place · Alt+Click: speculated · Shift+Click: tried · Right-click: upgraded +",
   "notes_find": "Find",
   "notes_find_tip": "Search note nodes in the current library (Ctrl+F)",
   "notes_search_placeholder": "Search notes: title / note / card id",
@@ -231,5 +231,7 @@
   "quick_act_settings": "Open settings",
   "compare_turns": "Turns",
   "settings_export_dir": "Export folder (Markdown + PNG)",
-  "settings_open_export": "Open folder"
+  "settings_open_export": "Open folder",
+  "settings_copy_md": "Copy Markdown",
+  "export_copied": "Markdown copied to clipboard"
 }

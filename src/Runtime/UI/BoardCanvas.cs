@@ -630,14 +630,14 @@ public partial class BoardCanvas : Control
         return false;
     }
 
-    public void AddCardNode(CardSnapshot snapshot, Vector2 position, bool speculated = false)
+    public void AddCardNode(CardSnapshot snapshot, Vector2 position, bool speculated = false, bool tried = false)
     {
         if (_board == null || _board.IsReadOnly)
         {
             return;
         }
         var node = NotesRuntime.CreateCardNode(snapshot, position.X, position.Y);
-        node.State = speculated ? NodeState.Speculated : NodeState.None;
+        node.State = tried ? NodeState.Tried : speculated ? NodeState.Speculated : NodeState.None;
         NotesRuntime.Commands.Execute(new AddNodeCommand(NotesRuntime.ActiveDocument, _board.Id, node));
         NotesRuntime.Raise();
     }

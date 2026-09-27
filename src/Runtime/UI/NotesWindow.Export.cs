@@ -44,6 +44,20 @@ public partial class NotesWindow
     private static string ExportDirectory() =>
         ProjectSettings.GlobalizePath("user://notes-export");
 
+    /// <summary>Copies the active board as Markdown straight to the clipboard
+    /// (quick share without touching the export folder).</summary>
+    private void CopyMarkdownToClipboard()
+    {
+        var labels = new NotesExportLabels(
+            ModLocalization.T("export_turn", "回合"),
+            "HP",
+            ModLocalization.T("export_free", "自由节点"),
+            ModLocalization.T("export_note", "备注"));
+        DisplayServer.ClipboardSet(NotesExport.ToMarkdown(NotesRuntime.ActiveBoard, labels));
+        NotesRuntime.SetImportMessage(ModLocalization.T("export_copied", "已复制 Markdown 到剪贴板"));
+        NotesRuntime.Raise();
+    }
+
     /// <summary>Opens the export folder in the system file manager.</summary>
     public void OpenExportDirectory()
     {

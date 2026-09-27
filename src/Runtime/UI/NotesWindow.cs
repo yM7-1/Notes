@@ -219,11 +219,11 @@ public partial class NotesWindow : Control
         body.AddChild(_canvas);
 
         _palette = new CardPalette { SizeFlagsVertical = SizeFlags.ExpandFill };
-        _palette.CardActivated += (snapshot, forceSpeculated) =>
+        _palette.CardActivated += (snapshot, forceSpeculated, forceTried) =>
             _canvas.AddCardNode(snapshot, _canvas.SuggestFreePosition(
                 _canvas.ViewCenterInBoardCoords()
                 - new Vector2(NodeControl.NodeWidth / 2f, NodeControl.NodeHeight / 2f)),
-                speculated: forceSpeculated);
+                speculated: forceSpeculated, tried: forceTried);
 
         var right = new VBoxContainer
         {

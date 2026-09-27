@@ -32,7 +32,7 @@ public partial class CardPalette : PanelContainer
     private double _timer;
     private string _signature = "";
 
-    public event Action<CardSnapshot, bool>? CardActivated;
+    public event Action<CardSnapshot, bool, bool>? CardActivated;
 
     public override void _Ready()
     {
@@ -320,7 +320,7 @@ public partial class CardPalette : PanelContainer
         var row = new DragCardButton { Name = "CardRow" };
         row.Setup(snapshot, speculated, count);
         row.CardKey = key ?? "";
-        row.Pressed += () => CardActivated?.Invoke(row.Snapshot, row.AltHeld);
+        row.Pressed += () => CardActivated?.Invoke(row.Snapshot, row.AltHeld, row.ShiftHeld);
         if (key != null)
         {
             row.TooltipText += "\n" + ModLocalization.T("palette_upgrade_tip", "Right-click toggles upgraded +");
@@ -387,6 +387,10 @@ public partial class DragCardButton : Button
     /// (the palette adds a speculated legend instead of a plain one).</summary>
     public bool AltHeld { get; private set; }
 
+    /// <summary>True when the last left press was made with Shift held
+    /// (the palette adds an already-tried legend instead of a plain one).</summary>
+    public bool ShiftHeld { get; private set; }
+
     /// <summary>Card ref id for the codex rows ("" for hand/deck rows).</summary>
     public string CardKey { get; set; } = "";
 
@@ -424,6 +428,7 @@ public partial class DragCardButton : Button
             && button.Pressed)
         {
             AltHeld = button.AltPressed;
+            ShiftHeld = button.ShiftPressed;
         }
         if (@event is InputEventMouseButton button2
             && button2.ButtonIndex == MouseButton.Right
