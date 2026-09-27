@@ -119,6 +119,24 @@ public class NotesJsonTests
     }
 
     [Fact]
+    public void Normalize_KeepsSummaryBoards()
+    {
+        var document = new NotesDocument();
+        document.Boards.Add(new NotesBoard
+        {
+            Id = "s",
+            Name = "Recap",
+            Kind = BoardKind.Summary,
+            Nodes = { new NotesNode { Id = "n", Title = "t" } },
+        });
+
+        var roundTrip = NotesJson.Deserialize(NotesJson.Serialize(document));
+
+        Assert.Equal(BoardKind.Summary, roundTrip.Boards[0].Kind);
+        Assert.Single(roundTrip.Boards[0].Nodes);
+    }
+
+    [Fact]
     public void Normalize_DuplicateEntityIds_KeepReferencesResolvable()
     {
         var document = new NotesDocument

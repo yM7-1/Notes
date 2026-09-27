@@ -374,6 +374,12 @@ public partial class NotesWindow : Control
             _onboarding.Visible = true;
         }
         RefreshHeader();
+        // Give gamepad players a starting focus; keyboard users keep the
+        // normal click-to-focus flow.
+        if (Input.GetConnectedJoypads().Count > 0)
+        {
+            _boardPicker.GrabFocus();
+        }
     }
 
     private void DismissOnboarding()
@@ -802,7 +808,7 @@ public partial class NotesWindow : Control
 
     private static Button MakeButton(string text, Action onPressed, string? tooltip = null)
     {
-        var button = new Button { Text = text };
+        var button = new Button { Text = text, FocusMode = FocusModeEnum.All };
         UiStyle.StyleButton(button);
         if (!string.IsNullOrEmpty(tooltip))
         {

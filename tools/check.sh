@@ -27,6 +27,9 @@ if ! grep -q "v$VERSION" packaging/workshop/Notes_workshop.vdf; then
 fi
 echo "    v$VERSION ok"
 
+echo "==> i18n key parity"
+python3 tools/check_i18n.py
+
 REF_DIR="${STS2_REFS_DIR:-$PWD/.refs/sts2-refs}"
 REF_MIN="$REF_DIR/0.107.1"
 

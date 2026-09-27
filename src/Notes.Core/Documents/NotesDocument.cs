@@ -87,6 +87,22 @@ public sealed class NotesDocument
         return CreateBoard(name, BoardKind.Current);
     }
 
+    /// <summary>Resets a run document for a new combat: recap (Summary) boards
+    /// survive, everything else is dropped, and the standard overview + current
+    /// boards are guaranteed (the last recap becomes active when present).</summary>
+    public void ResetForNewCombat(string overviewName, string currentName)
+    {
+        var recaps = Boards.Where(b => b.Kind == BoardKind.Summary).ToList();
+        Boards.Clear();
+        Boards.AddRange(recaps);
+        EnsureOverviewBoard(overviewName);
+        EnsureCurrentBoard(currentName);
+        if (recaps.Count > 0)
+        {
+            ActiveBoardId = recaps[^1].Id;
+        }
+    }
+
     /// <summary>Deep-copies a board (regions, nodes, edges, annotations) into a
     /// detached new interactive world-line board with fresh ids; positions and
     /// captured snapshots are preserved. The caller attaches it (e.g. through

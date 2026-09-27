@@ -157,4 +157,42 @@ public class CommandStackTests
         limited.Execute(new AddNodeCommand(doc, board.Id, Node("d")));
         Assert.False(limited.CanRedo);
     }
+
+    [Fact]
+    public void Limit_ChangedAtRuntime_TrimsExistingHistory()
+    {
+        var (doc, board, _) = NewBoard();
+        var stack = new CommandStack();
+        for (var i = 0; i < 5; i++)
+        {
+            stack.Execute(new AddNodeCommand(doc, board.Id, Node("n" + i)));
+        }
+
+        stack.Limit = 2;
+
+        Assert.True(stack.Undo());
+        Assert.True(stack.Undo());
+        Assert.False(stack.CanUndo);
+        Assert.Equal(3, board.Nodes.Count);
+    }
+
+    [Fact]
+    public void Composite_UndoRevertsAllBatchSteps()
+    {
+        var (doc, board, stack) = NewBoard();
+        var commands = new List<INotesCommand>
+        {
+            new AddNodeCommand(doc, board.Id, Node("a")),
+            new AddNodeCommand(doc, board.Id, Node("b")),
+        };
+
+        stack.Execute(new CompositeCommand(commands, "Batch"));
+        Assert.Equal(2, board.Nodes.Count);
+
+        stack.Undo();
+        Assert.Empty(board.Nodes);
+
+        stack.Redo();
+        Assert.Equal(2, board.Nodes.Count);
+    }
 }

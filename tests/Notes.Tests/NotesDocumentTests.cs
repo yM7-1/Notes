@@ -83,4 +83,23 @@ public class NotesDocumentTests
         Assert.Equal(first.Id, document.ActiveBoardId);
         Assert.Single(document.Boards);
     }
+
+    [Fact]
+    public void ResetForNewCombat_KeepsRecaps_AndEnsuresSystemBoards()
+    {
+        var document = new NotesDocument();
+        document.EnsureOverviewBoard("Overview");
+        document.EnsureCurrentBoard("Current");
+        document.CreateWorldLineBoard("World line 1");
+        var recap = document.CreateBoard("Recap");
+        recap.Kind = BoardKind.Summary;
+
+        document.ResetForNewCombat("Overview", "Current");
+
+        Assert.Equal(3, document.Boards.Count);
+        Assert.Contains(document.Boards, b => b.Kind == BoardKind.Summary && b.Name == "Recap");
+        Assert.Contains(document.Boards, b => b.Kind == BoardKind.Overview);
+        Assert.Contains(document.Boards, b => b.Kind == BoardKind.Current);
+        Assert.Equal(recap.Id, document.ActiveBoardId);
+    }
 }

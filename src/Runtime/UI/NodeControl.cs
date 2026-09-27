@@ -43,7 +43,7 @@ public partial class NodeControl : Control
         Size = new Vector2(NodeWidth, NodeHeight);
         Position = new Vector2(node.X, node.Y);
         MouseFilter = MouseFilterEnum.Stop;
-        FocusMode = FocusModeEnum.None;
+        FocusMode = FocusModeEnum.Click; // gamepad / keyboard focusable
         MouseDefaultCursorShape = ReadOnly ? CursorShape.PointingHand : CursorShape.Move;
 
         _box = new StyleBoxFlat();
@@ -67,6 +67,12 @@ public partial class NodeControl : Control
             NotesRuntime.ClearHoverNode(_node.Id);
             QueueRedraw();
         };
+        FocusEntered += () =>
+        {
+            NotesRuntime.SelectNode(_node.Id);
+            QueueRedraw();
+        };
+        FocusExited += QueueRedraw;
 
         UpdateTooltip();
     }
@@ -140,6 +146,11 @@ public partial class NodeControl : Control
         if (selected)
         {
             DrawRect(new Rect2(-3, -3, Size.X + 6, Size.Y + 6), UiStyle.Accent, false, 1f);
+        }
+        else if (HasFocus())
+        {
+            DrawRect(new Rect2(-5, -5, Size.X + 10, Size.Y + 10),
+                new Color(UiStyle.Accent.R, UiStyle.Accent.G, UiStyle.Accent.B, 0.75f), false, 2f);
         }
 
         _bar.BgColor = kindColor;
@@ -232,6 +243,22 @@ public partial class NodeControl : Control
 
     public override void _GuiInput(InputEvent @event)
     {
+        if (@event is InputEventKey key && key.Pressed && !key.Echo && HasFocus()
+            && key.Keycode is Key.Enter or Key.KpEnter or Key.Space)
+        {
+            // Gamepad A / keyboard Enter on a focused node: open the editor
+            // (read-only nodes just confirm the selection).
+            if (ReadOnly)
+            {
+                NotesRuntime.SelectNode(_node.Id);
+            }
+            else
+            {
+                _canvas.OpenEditor(_node.Id);
+            }
+            AcceptEvent();
+            return;
+        }
         if (ReadOnly)
         {
             if (@event is InputEventMouseButton roButton

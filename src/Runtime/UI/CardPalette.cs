@@ -229,7 +229,7 @@ public partial class CardPalette : PanelContainer
     private void RefreshCodex()
     {
         _header.Text = ModLocalization.T("palette_codex", "Codex");
-        ClearRows();
+        _pendingScroll = _scroll.ScrollVertical;
         var query = _search.Text?.Trim() ?? "";
         var cost = _costFilter.Selected;
         var type = _typeFilter.Selected;
@@ -237,16 +237,38 @@ public partial class CardPalette : PanelContainer
             .Where(card => Matches(card, query, CardCatalog.CostOf(card), type))
             .Take(NotesRuntime.CodexLimit)
             .ToList();
+        var children = _rows.GetChildren();
+        // Reuse the leading rows that already show the same card (in order);
+        // only the tail after the first change is rebuilt. Right-click upgrade
+        // toggles therefore never rebuild the whole list.
+        var index = 0;
+        foreach (var card in results)
+        {
+            var key = card.Id.ToString();
+            if (index >= children.Count
+                || children[index] is not DragCardButton existing
+                || existing.CardKey != key)
+            {
+                break;
+            }
+            existing.Setup(CardCatalog.Snapshot(card) with { Upgraded = _upgradedKeys.Contains(key) },
+                speculated: true, count: 0);
+            index++;
+        }
+        for (var j = children.Count - 1; j >= index; j--)
+        {
+            _rows.RemoveChild(children[j]);
+            children[j].QueueFree();
+        }
         if (results.Count == 0)
         {
             AddHint(ModLocalization.T("palette_no_result", "No matching cards"));
             return;
         }
-        foreach (var card in results)
+        foreach (var card in results.Skip(index))
         {
             var key = card.Id.ToString();
-            var upgraded = _upgradedKeys.Contains(key);
-            var snapshot = CardCatalog.Snapshot(card) with { Upgraded = upgraded };
+            var snapshot = CardCatalog.Snapshot(card) with { Upgraded = _upgradedKeys.Contains(key) };
             _rows.AddChild(CreateRow(snapshot, speculated: true, count: 0, key));
         }
     }
@@ -297,21 +319,28 @@ public partial class CardPalette : PanelContainer
     {
         var row = new DragCardButton { Name = "CardRow" };
         row.Setup(snapshot, speculated, count);
-        row.Pressed += () => CardActivated?.Invoke(snapshot, row.AltHeld);
+        row.CardKey = key ?? "";
+        row.Pressed += () => CardActivated?.Invoke(row.Snapshot, row.AltHeld);
         if (key != null)
         {
             row.TooltipText += "\n" + ModLocalization.T("palette_upgrade_tip", "Right-click toggles upgraded +");
-            row.RightClicked += () =>
-            {
-                if (!_upgradedKeys.Remove(key))
-                {
-                    _upgradedKeys.Add(key);
-                }
-                Refresh(force: true);
-            };
+            row.RightClicked += () => OnRowRightClicked(row);
         }
         row.TooltipText += "\n" + ModLocalization.T("palette_click_tip", "Click: add at view center · Alt+Click: add as speculated");
         return row;
+    }
+
+    private void OnRowRightClicked(DragCardButton row)
+    {
+        if (row.CardKey.Length == 0)
+        {
+            return;
+        }
+        if (!_upgradedKeys.Remove(row.CardKey))
+        {
+            _upgradedKeys.Add(row.CardKey);
+        }
+        Refresh(force: true);
     }
 
     private void AddHint(string text)
@@ -357,6 +386,13 @@ public partial class DragCardButton : Button
     /// <summary>True when the last left press was made with Alt held
     /// (the palette adds a speculated legend instead of a plain one).</summary>
     public bool AltHeld { get; private set; }
+
+    /// <summary>Card ref id for the codex rows ("" for hand/deck rows).</summary>
+    public string CardKey { get; set; } = "";
+
+    /// <summary>Snapshot currently rendered (re-read by the click handler so
+    /// reused rows always activate the latest state).</summary>
+    public CardSnapshot Snapshot => _snapshot;
 
     public event Action? RightClicked;
 

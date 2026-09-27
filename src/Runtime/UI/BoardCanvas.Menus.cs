@@ -96,16 +96,16 @@ public partial class BoardCanvas
                 OpenEditor(_menuNodeId);
                 break;
             case MenuTried:
-                SetNodeState(_menuNodeId, NodeState.Tried);
+                NotesRuntime.SetNodeState(_menuNodeId, NodeState.Tried);
                 break;
             case MenuSpeculated:
-                SetNodeState(_menuNodeId, NodeState.Speculated);
+                NotesRuntime.SetNodeState(_menuNodeId, NodeState.Speculated);
                 break;
             case MenuConfirmed:
-                SetNodeState(_menuNodeId, NodeState.Confirmed);
+                NotesRuntime.SetNodeState(_menuNodeId, NodeState.Confirmed);
                 break;
             case MenuClearState:
-                SetNodeState(_menuNodeId, NodeState.None);
+                NotesRuntime.SetNodeState(_menuNodeId, NodeState.None);
                 break;
             case MenuDuplicate:
                 DuplicateNode(_menuNodeId);
@@ -127,11 +127,6 @@ public partial class BoardCanvas
                 NotesRuntime.Raise();
                 break;
         }
-    }
-
-    private void SetNodeState(string nodeId, NodeState state)
-    {
-        NotesRuntime.SetNodeState(nodeId, state);
     }
 
     private void ToggleUpgrade(string nodeId)
